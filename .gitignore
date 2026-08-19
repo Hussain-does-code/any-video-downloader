@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.*
+!.env.example
+downloads/
+*.mp4
+*.mkv
+*.webm
+*.part*
+*.ytdl
+*.ts
+*.log
+.DS_Store
+Thumbs.db
+bin/
+*.exe

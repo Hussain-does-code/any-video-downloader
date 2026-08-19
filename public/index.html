@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apex Video Downloader — Intelligent 4K Stream Extraction</title>
+  <meta name="description" content="Orchestrate and download your 4K video data streams with intelligent speed, zero telemetry, and maximum fidelity across 1,800+ platforms.">
+  
+  <!-- Google Fonts: Plus Jakarta Sans & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Design System -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Main Application Container -->
+  <div class="app-container">
+    
+    <!-- ── Top Header Navigation ── -->
+    <header class="app-header">
+      <a href="/" class="logo">
+        <div class="logo-symbol">
+          <i class="fa-solid fa-bolt"></i>
+        </div>
+        <div class="logo-text-group">
+          <span class="logo-brand">Apex<span style="color:#2563EB;">Flow</span></span>
+          <span class="logo-status-tag">
+            <span class="status-live-beacon"></span>
+            <span>Engine Ready • 4K Active</span>
+          </span>
+        </div>
+      </a>
+
+      <div class="header-nav-actions">
+        <button id="openFolderBtn" class="pill-btn" title="Open Downloads Directory on Disk">
+          <i class="fa-regular fa-folder-open"></i>
+          <span class="btn-label">Storage</span>
+        </button>
+        <button id="toggleHistoryBtn" class="pill-btn" title="View Download History">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <span class="btn-label">History</span>
+          <span class="counter-badge" id="historyCount">0</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ── Hero Stage with Glass Ribbons Backdrop ── -->
+    <section class="hero-section">
+      <div class="hero-ribbon-stage">
+        
+        <div class="hero-content">
+          
+          <!-- Floating Interactive Node Pills -->
+          <div class="floating-nodes-row">
+            <div class="glass-node-pill">
+              <span class="node-dot cyan"></span>
+              <span>4K Ultra HD</span>
+            </div>
+            <div class="glass-node-pill">
+              <span class="node-dot blue"></span>
+              <span>Lossless 320k Audio</span>
+            </div>
+            <div class="glass-node-pill">
+              <span class="node-dot purple"></span>
+              <span>Multi-threaded Engine</span>
+            </div>
+            <div class="glass-node-pill">
+              <span class="node-dot green"></span>
+              <span>1,800+ Platforms</span>
+            </div>
+          </div>
+
+          <!-- Headline & Subtitle -->
+          <h1 class="hero-headline">
+            Orchestrate & Download<br>Any Video Stream in Pure 4K
+          </h1>
+          <p class="hero-subheadline">
+            Extract high-fidelity 4K, 1080p video and studio-grade MP3 audio seamlessly from YouTube, Instagram, TikTok, Twitter/X, and 1,800+ video networks.
+          </p>
+
+          <!-- Sleek Central URL Input -->
+          <div class="input-glass-card">
+            <div class="input-icon-slot">
+              <i class="fa-solid fa-link"></i>
+            </div>
+            <input 
+              type="url" 
+              id="videoUrlInput" 
+              placeholder="Paste any video link (e.g. https://www.youtube.com/watch?v=...)" 
+              autocomplete="off" 
+              spellcheck="false"
+            >
+            <div class="input-side-tools">
+              <button id="pasteBtn" class="input-paste-btn" title="Paste from clipboard">
+                <i class="fa-regular fa-paste"></i>
+                <span>Paste</span>
+              </button>
+              <button id="clearBtn" class="input-clear-btn hidden" title="Clear input">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <button id="fetchBtn" class="cta-fetch-btn">
+              <span class="btn-text">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                Analyze Stream
+              </span>
+              <span class="btn-spinner hidden">
+                <i class="fa-solid fa-circle-notch fa-spin"></i>
+                Extracting...
+              </span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Platform Trust Row -->
+      <div class="platform-trust-bar">
+        <span class="trust-title">Supported Video Networks</span>
+        <div class="platform-pills-row">
+          <span class="platform-pill"><i class="fa-brands fa-youtube" style="color:#FF0000;"></i> YouTube</span>
+          <span class="platform-pill"><i class="fa-brands fa-instagram" style="color:#E1306C;"></i> Instagram</span>
+          <span class="platform-pill"><i class="fa-brands fa-tiktok" style="color:#000000;"></i> TikTok</span>
+          <span class="platform-pill"><i class="fa-brands fa-x-twitter" style="color:#0F172A;"></i> Twitter / X</span>
+          <span class="platform-pill"><i class="fa-brands fa-reddit-alien" style="color:#FF4500;"></i> Reddit</span>
+          <span class="platform-pill"><i class="fa-brands fa-facebook" style="color:#1877F2;"></i> Facebook</span>
+          <span class="platform-pill"><i class="fa-brands fa-vimeo-v" style="color:#1AB7EA;"></i> Vimeo</span>
+          <span class="platform-pill"><i class="fa-solid fa-globe" style="color:#2563EB;"></i> 1,800+ More</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Error Alert Banner ── -->
+    <div id="errorBanner" class="error-banner hidden">
+      <div class="error-icon">
+        <i class="fa-solid fa-circle-exclamation"></i>
+      </div>
+      <div class="error-content">
+        <h4 id="errorTitle">Could not fetch video stream</h4>
+        <p id="errorMessage">Please check the URL and ensure the video is publicly accessible.</p>
+      </div>
+      <button id="closeErrorBtn" class="error-close-btn" title="Dismiss error">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <!-- ── Video Result Card ── -->
+    <section id="resultSection" class="result-section hidden">
+      <div class="result-card">
+        
+        <!-- Video Header & Metadata -->
+        <div class="video-header-grid">
+          <div class="video-thumb-container">
+            <img id="videoThumb" src="" alt="Video Stream Thumbnail">
+            <span id="videoDuration" class="duration-tag">00:00</span>
+            <div class="site-badge" id="siteBadge">
+              <i class="fa-solid fa-play" style="color:#2563EB; font-size:10px;"></i>
+              <span id="siteName">Web</span>
+            </div>
+          </div>
+
+          <div class="video-metadata-col">
+            <h2 id="videoTitle" class="video-title-display">Video Stream Title Loading...</h2>
+            
+            <div class="meta-tags-row">
+              <div class="meta-pill" id="uploaderChip">
+                <i class="fa-solid fa-circle-user" style="color:#64748B;"></i>
+                <span id="videoUploader">Channel</span>
+              </div>
+              <div class="meta-pill" id="viewsContainer">
+                <i class="fa-solid fa-eye" style="color:#64748B;"></i>
+                <span id="videoViews">0 views</span>
+              </div>
+              <span class="quality-crown-pill" id="maxQualityBadge">
+                <i class="fa-solid fa-crown"></i>
+                <span>4K Available</span>
+              </span>
+            </div>
+
+            <p class="stream-info-note">
+              <i class="fa-solid fa-circle-info"></i>
+              <span>High-resolution 4K and 1080p formats are dynamically merged with crystal-clear audio via local multi-threaded engine.</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Format Segmented Toggle Bar -->
+        <div class="format-controls-header">
+          <div class="segmented-toggle-bar">
+            <button class="toggle-segment-btn active" data-tab="video-tab">
+              <i class="fa-solid fa-film"></i>
+              <span>Video Formats (MP4)</span>
+            </button>
+            <button class="toggle-segment-btn" data-tab="audio-tab">
+              <i class="fa-solid fa-music"></i>
+              <span>Audio Only (MP3)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Format Stream Lists -->
+        <div class="formats-body-wrapper">
+          <div id="video-tab" class="tab-pane active">
+            <div class="format-rows-stack" id="videoFormatsGrid">
+              <!-- Injected dynamically by app.js -->
+            </div>
+          </div>
+          <div id="audio-tab" class="tab-pane">
+            <div class="format-rows-stack" id="audioFormatsGrid">
+              <!-- Injected dynamically by app.js -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Active Downloads Section ── -->
+    <section id="activeDownloadsSection" class="active-downloads-section hidden">
+      <h3 class="section-title-clean">
+        <i class="fa-solid fa-circle-arrow-down"></i>
+        Active Download Pipeline
+      </h3>
+      <div id="activeDownloadsList" class="active-downloads-list">
+        <!-- Live Download Items Injected Dynamically -->
+      </div>
+    </section>
+
+    <!-- ── History Drawer / Slide-Over ── -->
+    <div id="historyDrawer" class="hidden">
+      <div class="drawer-backdrop" id="drawerOverlay"></div>
+      <div class="drawer-slide-panel">
+        <div class="drawer-header-clean">
+          <div class="drawer-title-group">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <h3>Download History</h3>
+          </div>
+          <div class="drawer-actions-group">
+            <button id="openFolderDrawerBtn" class="pill-btn" style="font-size:12px; padding:6px 14px;">
+              <i class="fa-regular fa-folder-open"></i>
+              <span>Open Storage</span>
+            </button>
+            <button id="closeHistoryBtn" class="drawer-close-circle" title="Close history">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+        <div class="drawer-scroll-body">
+          <div id="historyList" class="history-items-stack">
+            <div class="empty-state-card">
+              <i class="fa-solid fa-cloud-arrow-down"></i>
+              <p>No downloads recorded yet. Paste a link above to start!</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Cancel Confirmation Modal ── -->
+    <div id="cancelConfirmModal" class="modal-backdrop-clean hidden">
+      <div class="confirm-box-card">
+        <div class="confirm-icon-bubble">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <h3>Cancel Stream Download?</h3>
+        <p id="cancelConfirmText">Are you sure you want to stop and cancel this active download?</p>
+        <div class="confirm-btn-pair">
+          <button id="cancelConfirmNoBtn" class="pill-btn">
+            <i class="fa-solid fa-arrow-left"></i>
+            Keep Downloading
+          </button>
+          <button id="cancelConfirmYesBtn" class="danger-pill-btn">
+            <i class="fa-solid fa-xmark"></i>
+            Cancel Stream
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Features Showcase Footer (4 Columns) ── -->
+    <footer class="features-saas-footer">
+      <div class="saas-feature-card">
+        <div class="saas-feature-icon">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <h4>Visual Stream Privacy</h4>
+        <p>100% local device execution. Zero third-party telemetry, zero account requirements, zero tracking.</p>
+      </div>
+
+      <div class="saas-feature-card">
+        <div class="saas-feature-icon">
+          <i class="fa-solid fa-gauge-high"></i>
+        </div>
+        <h4>Real-Time Pipeline Speed</h4>
+        <p>Multi-threaded segment pulling engine supporting 4K Ultra HD, 60 FPS, and 320kbps lossless MP3.</p>
+      </div>
+
+      <div class="saas-feature-card">
+        <div class="saas-feature-icon">
+          <i class="fa-solid fa-sliders"></i>
+        </div>
+        <h4>Smart Format Extraction</h4>
+        <p>Automated resolution and audio stream muxing using optimized FFmpeg backend pipelines.</p>
+      </div>
+
+      <div class="saas-feature-card">
+        <div class="saas-feature-icon">
+          <i class="fa-solid fa-infinity"></i>
+        </div>
+        <h4>Universal Integration</h4>
+        <p>Unlimited download capability across 1,800+ social and video streaming platforms with zero ads.</p>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Application Logic -->
+  <script src="js/app.js"></script>
+</body>
+</html>
