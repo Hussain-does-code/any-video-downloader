@@ -1,0 +1,9 @@
+bin/
+downloads/
+node_modules/
+.agents/
+test/
+*.exe
+*.log
+.git/
+.env*
