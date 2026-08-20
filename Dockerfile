@@ -28,8 +28,8 @@ RUN npm ci --omit=dev || npm install --omit=dev
 # Copy application files (excluding patterns in .dockerignore)
 COPY . .
 
-# Create downloads directory with proper permissions
-RUN mkdir -p /app/downloads && chmod 777 /app/downloads
+# Create downloads directory and ensure full permissions
+RUN mkdir -p /app/downloads && chmod -R 777 /app
 
 # Expose server port
 EXPOSE 3000

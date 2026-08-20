@@ -47,15 +47,16 @@ $baseUrl = "https://jules.googleapis.com/v1alpha"
 
 switch ($Action.ToLower()) {
     "status" {
-        Write-Host "🤖 Google Jules Client Status" -ForegroundColor Cyan
-        Write-Host "🔑 API Key Prefix: $($apiKey.Substring(0, 8))..." -ForegroundColor Green
+        Write-Host "[Google Jules Client Status]" -ForegroundColor Cyan
+        $prefix = if ($apiKey.Length -ge 8) { $apiKey.Substring(0, 8) } else { $apiKey }
+        Write-Host "API Key Prefix: $prefix..." -ForegroundColor Green
         try {
             $sources = Invoke-RestMethod -Uri "$baseUrl/sources?key=$apiKey" -Headers $headers -Method Get
-            Write-Host "📦 Connected Sources:" -ForegroundColor Yellow
+            Write-Host "Connected Sources:" -ForegroundColor Yellow
             $sources | ConvertTo-Json -Depth 4 | Write-Host
             
             $sessions = Invoke-RestMethod -Uri "$baseUrl/sessions?key=$apiKey" -Headers $headers -Method Get
-            Write-Host "📋 Active Sessions:" -ForegroundColor Yellow
+            Write-Host "Active Sessions:" -ForegroundColor Yellow
             $sessions | ConvertTo-Json -Depth 4 | Write-Host
         } catch {
             Write-Error "Failed to query Jules API: $($_.Exception.Message)"
@@ -100,7 +101,7 @@ switch ($Action.ToLower()) {
         } | ConvertTo-Json -Depth 5
 
         $res = Invoke-RestMethod -Uri "$baseUrl/sessions?key=$apiKey" -Headers $headers -Method Post -Body $body
-        Write-Host "🚀 Jules Cloud Session Created:" -ForegroundColor Green
+        Write-Host "Jules Cloud Session Created:" -ForegroundColor Green
         $res | ConvertTo-Json -Depth 4 | Write-Host
     }
     default {

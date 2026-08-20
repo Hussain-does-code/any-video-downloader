@@ -17,3 +17,5 @@ downloads/
 Thumbs.db
 bin/
 *.exe
+
+.vercel
