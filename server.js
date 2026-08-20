@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const https = require('https');
 const http = require('http');
 const dns = require('dns');
@@ -52,19 +53,22 @@ process.on('unhandledRejection', (reason) => {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Trust cloud reverse proxies (Cloudflare, Render, Railway, Fly.io, etc.)
+// Trust cloud reverse proxies (Vercel, Cloudflare, Render, Railway, Fly.io, etc.)
 app.set('trust proxy', 1);
 
-// Directories & Binaries
+// Directories & Binaries (Supports Vercel serverless /tmp and standard environments)
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
 const ROOT_DIR = __dirname;
-const BIN_DIR = path.join(ROOT_DIR, 'bin');
-const DOWNLOADS_DIR = path.join(ROOT_DIR, 'downloads');
+const BIN_DIR = isServerless ? path.join(os.tmpdir(), 'bin') : path.join(ROOT_DIR, 'bin');
+const DOWNLOADS_DIR = isServerless ? path.join(os.tmpdir(), 'downloads') : path.join(ROOT_DIR, 'downloads');
 
-if (!fs.existsSync(DOWNLOADS_DIR)) {
-  fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
-}
+try {
+  if (!fs.existsSync(DOWNLOADS_DIR)) {
+    fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+  }
+} catch (e) {}
 
-// ─── Cross-Platform Binary Resolution (Windows & Linux) ───
+// ─── Cross-Platform Binary Resolution (Windows & Linux / Vercel) ───
 let ffmpegStaticPath = null;
 try {
   ffmpegStaticPath = require('ffmpeg-static');
@@ -73,11 +77,15 @@ try {
 function getFfmpegPath() {
   const localWin = path.join(BIN_DIR, 'ffmpeg.exe');
   const localLinux = path.join(BIN_DIR, 'ffmpeg');
+  const tmpLinux = path.join(os.tmpdir(), 'bin', 'ffmpeg');
   if (process.platform === 'win32' && fs.existsSync(localWin)) {
     return localWin;
   }
   if (fs.existsSync(localLinux)) {
     return localLinux;
+  }
+  if (fs.existsSync(tmpLinux)) {
+    return tmpLinux;
   }
   if (ffmpegStaticPath && fs.existsSync(ffmpegStaticPath)) {
     return ffmpegStaticPath;
@@ -88,11 +96,15 @@ function getFfmpegPath() {
 function getYtdlpPath() {
   const localWin = path.join(BIN_DIR, 'yt-dlp.exe');
   const localLinux = path.join(BIN_DIR, 'yt-dlp');
+  const tmpLinux = path.join(os.tmpdir(), 'bin', 'yt-dlp');
   if (process.platform === 'win32' && fs.existsSync(localWin)) {
     return localWin;
   }
   if (fs.existsSync(localLinux)) {
     return localLinux;
+  }
+  if (fs.existsSync(tmpLinux)) {
+    return tmpLinux;
   }
   return 'yt-dlp';
 }
@@ -109,19 +121,20 @@ function isBinaryAvailable(binPath) {
   }
 }
 
-// Auto-download yt-dlp Linux standalone binary if missing on cloud container
+// Auto-download yt-dlp Linux standalone binary if missing on cloud container or Vercel
 async function ensureYtdlpBinary() {
   if (process.platform === 'win32') return;
-  const linuxPath = path.join(BIN_DIR, 'yt-dlp');
+  const targetBinDir = isServerless ? path.join(os.tmpdir(), 'bin') : BIN_DIR;
+  const linuxPath = path.join(targetBinDir, 'yt-dlp');
   if (fs.existsSync(linuxPath)) {
     try { fs.chmodSync(linuxPath, '755'); } catch (e) {}
     return;
   }
   if (isBinaryAvailable('yt-dlp')) return;
 
-  console.log('[Cloud Setup] Installing standalone yt-dlp binary for Linux...');
+  console.log('[Cloud/Vercel Setup] Installing standalone yt-dlp binary for Linux...');
   try {
-    if (!fs.existsSync(BIN_DIR)) fs.mkdirSync(BIN_DIR, { recursive: true });
+    if (!fs.existsSync(targetBinDir)) fs.mkdirSync(targetBinDir, { recursive: true });
     await new Promise((resolve, reject) => {
       const file = fs.createWriteStream(linuxPath);
       https.get('https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp', (res) => {
@@ -137,9 +150,9 @@ async function ensureYtdlpBinary() {
       }).on('error', reject);
     });
     fs.chmodSync(linuxPath, '755');
-    console.log('[Cloud Setup] yt-dlp installed successfully.');
+    console.log('[Cloud/Vercel Setup] yt-dlp installed successfully.');
   } catch (err) {
-    console.warn('[Cloud Setup Warning] Auto-download of yt-dlp skipped:', err.message);
+    console.warn('[Cloud/Vercel Setup Warning] Auto-download of yt-dlp skipped:', err.message);
   }
 }
 ensureYtdlpBinary().catch(() => {});
@@ -151,6 +164,10 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; media-src 'self' data: blob: https:; connect-src 'self' ws: wss:;"
+  );
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
@@ -161,28 +178,83 @@ app.use((req, res, next) => {
 function isPrivateOrLocalUrl(targetUrl) {
   if (!targetUrl || typeof targetUrl !== 'string') return true;
   try {
-    const parsed = new URL(targetUrl);
+    const trimmed = targetUrl.trim();
+    if (trimmed.length > 2048) return true;
+
+    const parsed = new URL(trimmed);
     const proto = parsed.protocol.toLowerCase();
     if (proto !== 'http:' && proto !== 'https:') {
       return true; // Block file://, gopher://, dict://, etc.
     }
-    const host = parsed.hostname.toLowerCase();
-    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0') {
+
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+
+    // Localhost & Loopback addresses
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host === '0.0.0.0' ||
+      host.startsWith('127.') ||
+      host.startsWith('0.')
+    ) {
       return true;
     }
-    if (host === '169.254.169.254' || host.startsWith('metadata.google') || host === 'instance-data') {
-      return true; // Cloud metadata attack prevention
+
+    // Cloud Metadata & Instance Data endpoints
+    if (
+      host === '169.254.169.254' ||
+      host === '100.100.100.200' ||
+      host.startsWith('metadata.google') ||
+      host === 'instance-data' ||
+      host.startsWith('169.254.')
+    ) {
+      return true;
     }
+
+    // Private IPv4 ranges (RFC 1918)
     if (
       host.startsWith('10.') ||
       host.startsWith('192.168.') ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)
+    ) {
+      return true;
+    }
+
+    // Private / Reserved IPv6
+    if (
+      host.startsWith('fc') ||
+      host.startsWith('fd') ||
+      host.startsWith('fe80') ||
+      host.includes('::ffff:127.') ||
+      host.includes('::ffff:10.') ||
+      host.includes('::ffff:192.168.')
+    ) {
+      return true;
+    }
+
+    // Special & Internal domain names
+    if (
       host.endsWith('.local') ||
       host.endsWith('.internal') ||
-      host.endsWith('.localhost')
+      host.endsWith('.localhost') ||
+      host.endsWith('.lan') ||
+      host.endsWith('.home') ||
+      host.endsWith('.corp') ||
+      host.endsWith('.test') ||
+      host.endsWith('.example') ||
+      host.endsWith('.invalid')
     ) {
-      return true; // Private network address
+      return true;
     }
+
+    // Block non-standard dangerous internal ports
+    const port = parsed.port ? parseInt(parsed.port, 10) : (proto === 'https:' ? 443 : 80);
+    const blockedPorts = [22, 23, 25, 110, 143, 3306, 5432, 6379, 27017, 11211, 9200];
+    if (blockedPorts.includes(port)) {
+      return true;
+    }
+
     return false;
   } catch (e) {
     return true;
@@ -194,10 +266,14 @@ function safeResolveDownloadPath(filename) {
   if (!filename || typeof filename !== 'string') {
     throw new Error('Invalid filename');
   }
-  const safeName = path.basename(filename);
+  const cleanName = filename.replace(/\0/g, ''); // Strip null bytes
+  const safeName = path.basename(cleanName);
+  if (!safeName || safeName === '.' || safeName === '..') {
+    throw new Error('Access denied: Invalid filename.');
+  }
   const resolved = path.resolve(DOWNLOADS_DIR, safeName);
   const baseResolved = path.resolve(DOWNLOADS_DIR);
-  if (!resolved.startsWith(baseResolved)) {
+  if (!resolved.startsWith(baseResolved + path.sep) && resolved !== baseResolved) {
     throw new Error('Access denied: Path traversal detected.');
   }
   return { safeName, resolved };
@@ -229,13 +305,24 @@ function pruneOldDownloads() {
 setInterval(pruneOldDownloads, PRUNE_INTERVAL_MS);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
+app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 app.use(express.static(path.join(ROOT_DIR, 'public')));
 
 // Rate Limiting Defense (Manny's Rule: Protect against automated flooding & DoS)
 const requestCounts = new Map();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
 const MAX_REQUESTS_PER_WINDOW = 60;     // Max 60 requests per min per IP
+
+// Garbage collector for rate limiter memory
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, data] of requestCounts.entries()) {
+    if (now > data.resetTime) {
+      requestCounts.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
 
 app.use('/api/', (req, res, next) => {
   const ip = req.ip || req.connection.remoteAddress || 'unknown';
@@ -1208,7 +1295,17 @@ app.get('/api/proxy-image', async (req, res) => {
     return res.status(400).send('Invalid URL');
   }
 
-  const decoded = decodeURIComponent(url);
+  let decoded;
+  try {
+    decoded = decodeURIComponent(url).trim();
+  } catch (e) {
+    return res.status(400).send('Malformed URL');
+  }
+
+  if (isPrivateOrLocalUrl(decoded)) {
+    return res.status(400).send('Restricted or invalid image URL');
+  }
+
   const gateways = [
     `https://proxy.cors.sh/${decoded}`,
     `https://corsproxy.org/?${encodeURIComponent(decoded)}`,
@@ -1225,9 +1322,16 @@ app.get('/api/proxy-image', async (req, res) => {
         signal: AbortSignal.timeout(6000)
       });
       if (response.ok) {
-        res.setHeader('Content-Type', response.headers.get('content-type') || 'image/jpeg');
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        if (!contentType.startsWith('image/')) {
+          continue;
+        }
+        res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=86400');
         const buf = Buffer.from(await response.arrayBuffer());
+        if (buf.length > 10 * 1024 * 1024) { // Max 10MB image limit
+          return res.status(413).send('Image too large');
+        }
         return res.send(buf);
       }
     } catch (e) {}
@@ -1616,10 +1720,13 @@ app.post('/api/download', async (req, res) => {
 
   const downloadId = Math.random().toString(36).substring(2, 12) + Date.now().toString(36);
   const isAudioFlag = isAudio === true || isAudio === 'true';
-  const fileExt = isAudioFlag ? 'mp3' : (ext || 'mp4');
+  const cleanExt = (isAudioFlag ? 'mp3' : (ext || 'mp4')).toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || (isAudioFlag ? 'mp3' : 'mp4');
   const safeTitle = sanitizeFilename(title || 'video');
-  const cleanFilename = `${safeTitle}.${fileExt}`;
+  const cleanFilename = `${safeTitle}.${cleanExt}`;
   const localSavedPath = path.join(DOWNLOADS_DIR, cleanFilename);
+
+  const safeFormatId = (formatId && typeof formatId === 'string' && /^[a-zA-Z0-9_+./-]+$/.test(formatId.trim())) ? formatId.trim() : null;
+  const safeHeight = (height && parseInt(height, 10) > 0 && parseInt(height, 10) <= 10000) ? parseInt(height, 10) : null;
 
   const downloadState = {
     id: downloadId,
@@ -1740,16 +1847,15 @@ app.post('/api/download', async (req, res) => {
   if (isAudioFlag) {
     ytdlpArgs.push('-x', '--audio-format', 'mp3', '--audio-quality', '0');
   } else {
-    const h = height && parseInt(height, 10) > 0 ? parseInt(height, 10) : null;
-    if (formatId && !formatId.startsWith('hls-') && !formatId.startsWith('mp4-')) {
-      if (h) {
-        ytdlpArgs.push('-f', `${formatId}/${formatId}+bestaudio/bestvideo[height=${h}]+bestaudio/bestvideo[height<=${h}]+bestaudio/best[height=${h}]/best[height<=${h}]/bestvideo+bestaudio/best`);
+    if (safeFormatId && !safeFormatId.startsWith('hls-') && !safeFormatId.startsWith('mp4-')) {
+      if (safeHeight) {
+        ytdlpArgs.push('-f', `${safeFormatId}/${safeFormatId}+bestaudio/bestvideo[height=${safeHeight}]+bestaudio/bestvideo[height<=${safeHeight}]+bestaudio/best[height=${safeHeight}]/best[height<=${safeHeight}]/bestvideo+bestaudio/best`);
       } else {
-        ytdlpArgs.push('-f', `${formatId}/${formatId}+bestaudio/bestvideo+bestaudio/best`);
+        ytdlpArgs.push('-f', `${safeFormatId}/${safeFormatId}+bestaudio/bestvideo+bestaudio/best`);
       }
       ytdlpArgs.push('--merge-output-format', 'mp4');
-    } else if (h) {
-      ytdlpArgs.push('-f', `bestvideo[height=${h}]+bestaudio/bestvideo[height<=${h}]+bestaudio/best[height=${h}]/best[height<=${h}]/bestvideo+bestaudio/best`);
+    } else if (safeHeight) {
+      ytdlpArgs.push('-f', `bestvideo[height=${safeHeight}]+bestaudio/bestvideo[height<=${safeHeight}]+bestaudio/best[height=${safeHeight}]/best[height<=${safeHeight}]/bestvideo+bestaudio/best`);
       ytdlpArgs.push('--merge-output-format', 'mp4');
     } else {
       ytdlpArgs.push('-f', 'bestvideo+bestaudio/best');

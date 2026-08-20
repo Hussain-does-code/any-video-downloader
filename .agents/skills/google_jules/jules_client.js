@@ -27,7 +27,7 @@ function apiRequest(endpoint, method = 'GET', data = null) {
     const options = {
       hostname: API_BASE,
       port: 443,
-      path: `/v1alpha/${endpoint}?key=${API_KEY}`,
+      path: `/v1alpha/${endpoint}${endpoint.includes('?') ? '&' : '?'}key=${API_KEY}`,
       method: method,
       headers: {
         'Content-Type': 'application/json',
@@ -54,6 +54,42 @@ function apiRequest(endpoint, method = 'GET', data = null) {
   });
 }
 
+async function listSources() {
+  const res = await apiRequest('sources');
+  return res.data;
+}
+
+async function listSessions() {
+  const res = await apiRequest('sessions');
+  return res.data;
+}
+
+async function getSession(sessionId) {
+  const res = await apiRequest(`sessions/${sessionId}`);
+  return res.data;
+}
+
+async function listActivities(sessionId) {
+  const res = await apiRequest(`sessions/${sessionId}/activities`);
+  return res.data;
+}
+
+async function createSession(source, branch, prompt, title) {
+  const payload = {
+    prompt: prompt,
+    title: title || prompt.substring(0, 50),
+    sourceContext: {
+      source: source,
+      githubRepoContext: {
+        startingBranch: branch || 'main'
+      }
+    }
+  };
+
+  const res = await apiRequest('sessions', 'POST', payload);
+  return res;
+}
+
 async function main() {
   const action = process.argv[2] || 'status';
   console.log(`🤖 Google Jules Integration Client initialized`);
@@ -66,9 +102,34 @@ async function main() {
   try {
     if (action === 'status') {
       console.log(`🔑 Jules API Connected. Key prefix: ${API_KEY.substring(0, 8)}...`);
+      const sources = await listSources();
+      console.log(`📦 Connected GitHub Sources:`, JSON.stringify(sources, null, 2));
+    } else if (action === 'sources') {
+      const sources = await listSources();
+      console.log(`📦 Sources:`, JSON.stringify(sources, null, 2));
     } else if (action === 'list') {
-      const res = await apiRequest('sessions');
-      console.log(`📋 Active Sessions:`, JSON.stringify(res.data, null, 2));
+      const sessions = await listSessions();
+      console.log(`📋 Active Sessions:`, JSON.stringify(sessions, null, 2));
+    } else if (action === 'create') {
+      const source = process.argv[3];
+      const branch = process.argv[4] || 'main';
+      const prompt = process.argv[5];
+      const title = process.argv[6] || 'Cloud Task';
+      if (!source || !prompt) {
+        console.error('Usage: node jules_client.js create <source> <branch> <prompt> [title]');
+        process.exit(1);
+      }
+      console.log(`🚀 Creating Jules Cloud Session for ${source}...`);
+      const res = await createSession(source, branch, prompt, title);
+      console.log(`Result:`, JSON.stringify(res, null, 2));
+    } else if (action === 'get') {
+      const sessionId = process.argv[3];
+      if (!sessionId) {
+        console.error('Usage: node jules_client.js get <sessionId>');
+        process.exit(1);
+      }
+      const session = await getSession(sessionId);
+      console.log(`Session ${sessionId}:`, JSON.stringify(session, null, 2));
     }
   } catch (err) {
     console.error(`❌ Request Error:`, err.message);
@@ -79,4 +140,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { apiRequest, getApiKey };
+module.exports = { apiRequest, getApiKey, listSources, listSessions, createSession, getSession, listActivities };

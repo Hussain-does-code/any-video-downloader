@@ -43,11 +43,28 @@ function scanDirectory(dir) {
       scanDirectory(fullPath);
     } else if (entry.isFile()) {
       if (entry.name.startsWith('.env') && entry.name !== '.env.example') {
-        failures.push(`Found unignored .env file in source tree: ${fullPath}`);
+        let isIgnored = false;
+        try {
+          const relPath = path.relative(targetDir, fullPath);
+          execSync(`git check-ignore "${relPath}"`, { cwd: targetDir, stdio: 'ignore' });
+          isIgnored = true;
+        } catch (e) {}
+        if (!isIgnored) {
+          failures.push(`Found unignored .env file in source tree: ${fullPath}`);
+        }
       }
       try {
         const stat = fs.statSync(fullPath);
         if (stat.size > 1024 * 1024) continue; // Skip files > 1MB
+        // If file is gitignored, skip checking for secret leaks in environment files
+        let isIgnored = false;
+        try {
+          const relPath = path.relative(targetDir, fullPath);
+          execSync(`git check-ignore "${relPath}"`, { cwd: targetDir, stdio: 'ignore' });
+          isIgnored = true;
+        } catch (e) {}
+        if (isIgnored && entry.name.startsWith('.env')) continue;
+
         const content = fs.readFileSync(fullPath, 'utf8');
         for (const pattern of SECRET_PATTERNS) {
           if (pattern.regex.test(content)) {

@@ -10,7 +10,7 @@ Whenever working on any current or future project, do not work in isolation or r
 
 | Responsibility Domain | Lead Agent | Why & Execution Pattern |
 | :--- | :--- | :--- |
-| **Creative UI/UX & Motion Design** | **Antigravity** | Real-time design system synthesis, CSS glassmorphism, fluid physics animations, layout perfection, and live responsive tuning. |
+| **Creative UI/UX & Motion Design** | **Antigravity (with StitchMCP)** | Orchestrating StitchMCP for UI generation, variants, design systems, CSS glassmorphism, fluid physics animations, layout perfection, and live responsive tuning. |
 | **Core Architecture & Fast Logic** | **Antigravity** | Instant pair programming, complex route logic, real-time terminal diagnostics, and live feature development. |
 | **Security Auditing & Gatekeeping** | **Antigravity** | Auditing every diff against the *Master Secure Vibe Coding System* before code enters production. |
 | **Exhaustive Test Suite Generation** | **Google Jules** | Spinning up Google Cloud VMs to write and execute 100% coverage unit tests, integration tests, and edge-case fuzzing in the background. |
