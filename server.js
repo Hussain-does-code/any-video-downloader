@@ -2408,6 +2408,25 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
 
       // Fallback: If no video formats were parsed from formats list, synthesize best video option
       if (sortedVideos.length === 0) {
+        if (info.url && (info.url.includes("'+") || info.url.includes("video_url") || !info.url.startsWith('http'))) {
+          info.url = null;
+        }
+
+        if (!info.url && (info.extractor_key === 'HTML5MediaEmbed' || info.extractor_key === 'generic' || !info.extractor_key)) {
+          console.warn('[yt-dlp found no valid stream URL]: Attempting Cloud Fallback Extractor...');
+          try {
+            const cloudData = await extractCloudFallback(trimmedUrl);
+            if (cloudData && cloudData.videoFormats && cloudData.videoFormats.length > 0) {
+              return res.json({ ok: true, data: cloudData });
+            }
+          } catch (e) {}
+
+          return res.status(400).json({
+            ok: false,
+            error: 'No playable video stream found on this page. The host server has no active media stream for this movie entry. Please use a direct mirror link.'
+          });
+        }
+
         let fallbackHeight = info.height || 0;
         const titleAndUrl = `${info.title || ''} ${info.url || ''} ${trimmedUrl}`;
         if (!fallbackHeight) {
@@ -2430,10 +2449,6 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
                       is2k ? '2K Quad HD (1440p)' :
                       is1080 ? 'Full HD (1080p)' :
                       'Original Video (Best Available)';
-
-        if (info.url && (info.url.includes("'+") || info.url.includes("video_url") || !info.url.startsWith('http'))) {
-          info.url = null;
-        }
 
         const isDirectHlsFallback = info.url && info.url.includes('.m3u8');
         const isStandaloneFileFallback = (info.extractor_key === 'HTML5MediaEmbed' || info.extractor_key === 'generic' || !info.extractor_key) && 

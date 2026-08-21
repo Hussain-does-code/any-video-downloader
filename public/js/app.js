@@ -698,13 +698,14 @@ document.addEventListener('DOMContentLoaded', () => {
           activeEventSources.delete(downloadId);
         } else if (data.status === 'error') {
           if (badge) {
-            badge.textContent = 'Blocked by ISP';
+            const isIspBlock = data.error && (data.error.includes('ISP') || data.error.includes('10054') || data.error.includes('DNS filter'));
+            badge.textContent = isIspBlock ? 'Blocked by ISP' : 'Download Failed';
             badge.style.background = '#FEF2F2';
             badge.style.color = '#DC2626';
           }
           if (cancelBtn) cancelBtn.classList.add('hidden');
-          if (progressText) progressText.textContent = data.error || 'Server connection blocked by ISP firewall.';
-          if (speedText) speedText.textContent = 'Use Direct Download below';
+          if (progressText) progressText.textContent = data.error || 'Download failed.';
+          if (speedText) speedText.textContent = data.error?.includes('404') ? 'Stream missing on host' : 'Use Direct Download below';
           
           if (actions && currentVideoData?.videoFormats?.[0]?.directUrl) {
             const streamUrl = currentVideoData.videoFormats[0].directUrl;
