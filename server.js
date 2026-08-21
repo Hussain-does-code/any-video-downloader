@@ -2476,11 +2476,25 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
 
       const sortedAudios = audioOptions.sort((a, b) => (b.abr || 0) - (a.abr || 0));
 
+      let thumbnail = info.thumbnail || (info.thumbnails && info.thumbnails[info.thumbnails.length - 1]?.url) || '';
+      if (!thumbnail) {
+        try {
+          const pageHtml = await fetchText(trimmedUrl);
+          const metaImg = pageHtml.match(/<meta\s+(?:property|name)=["'](?:og:image|twitter:image)["']\s+content=["']([^"']+)["']/i) ||
+                          pageHtml.match(/<meta\s+content=["']([^"']+)["']\s+(?:property|name)=["'](?:og:image|twitter:image)["']/i) ||
+                          pageHtml.match(/<link\s+rel=["'](?:image_src|thumbnail)["']\s+href=["']([^"']+)["']/i) ||
+                          pageHtml.match(/<img[^>]+(?:class=["'][^"']*(?:poster|thumb|img-responsive)[^"']*["']|id=["']poster["'])[^>]+src=["']([^"']+)["']/i);
+          if (metaImg && metaImg[1]) {
+            thumbnail = metaImg[1].startsWith('//') ? 'https:' + metaImg[1] : (metaImg[1].startsWith('/') ? new URL(metaImg[1], trimmedUrl).toString() : metaImg[1]);
+          }
+        } catch (e) {}
+      }
+
       res.json({
         ok: true,
         data: {
           title: info.title || 'Untitled Video',
-          thumbnail: info.thumbnail || (info.thumbnails && info.thumbnails[info.thumbnails.length - 1]?.url) || '',
+          thumbnail: thumbnail,
           duration: info.duration,
           durationFormatted: formatDuration(info.duration),
           uploader: info.uploader || info.channel || 'Unknown Creator',
