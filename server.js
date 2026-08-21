@@ -2245,7 +2245,26 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
     }
 
     try {
-      const info = JSON.parse(stdoutData);
+      let info = null;
+      const lines = stdoutData.trim().split('\n').map(l => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        if (!line.startsWith('{')) continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed && (parsed.formats || parsed.url || parsed.title)) {
+            if (!info || (parsed.formats && parsed.formats.length > (info.formats?.length || 0))) {
+              info = parsed;
+            }
+          }
+        } catch (e) {}
+      }
+      if (!info && lines.length > 0) {
+        info = JSON.parse(lines[0]);
+      }
+      if (!info) {
+        throw new Error('Failed to parse yt-dlp output');
+      }
+
       const rawFormats = info.formats || [];
       const duration = info.duration || 0;
 
@@ -2264,12 +2283,14 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
       }
 
       for (const f of rawFormats) {
-        // Skip storyboard image strips and invalid non-video formats
+        // Skip storyboard image strips, invalid URLs and non-video formats
         if (
+          !f ||
           f.ext === 'mhtml' ||
           f.format_note === 'storyboard' ||
           f.vcodec === 'images' ||
-          (f.vcodec === 'none' && f.acodec === 'none')
+          (f.vcodec === 'none' && f.acodec === 'none') ||
+          (f.url && (f.url.includes("'+") || f.url.includes("video_url") || !f.url.startsWith('http')))
         ) {
           continue;
         }
@@ -2409,6 +2430,10 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
                       is2k ? '2K Quad HD (1440p)' :
                       is1080 ? 'Full HD (1080p)' :
                       'Original Video (Best Available)';
+
+        if (info.url && (info.url.includes("'+") || info.url.includes("video_url") || !info.url.startsWith('http'))) {
+          info.url = null;
+        }
 
         const isDirectHlsFallback = info.url && info.url.includes('.m3u8');
         const isStandaloneFileFallback = (info.extractor_key === 'HTML5MediaEmbed' || info.extractor_key === 'generic' || !info.extractor_key) && 
