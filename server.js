@@ -11,9 +11,9 @@ const { Resolver } = require('dns').promises;
 const { spawn, exec } = require('child_process');
 const { URL } = require('url');
 
-// Configure global custom DNS resolver to bypass local ISP DNS blocks
+// Configure global custom DNS & DoH resolver to bypass local ISP DNS blocks
 const customResolver = new Resolver();
-customResolver.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1']);
+customResolver.setServers(['1.1.1.1', '1.0.0.1', '8.8.8.8', '8.8.4.4', '9.9.9.9']);
 const dnsCache = new Map();
 
 async function universalLookup(hostname, options, callback) {
@@ -22,12 +22,14 @@ async function universalLookup(hostname, options, callback) {
     options = {};
   }
 
+  // Check in-memory DNS cache
   if (dnsCache.has(hostname)) {
     const cached = dnsCache.get(hostname);
     if (options && options.all) return callback(null, [{ address: cached, family: 4 }]);
     return callback(null, cached, 4);
   }
 
+  // 1. Try public secure UDP resolver (1.1.1.1, 8.8.8.8)
   try {
     const addresses = await customResolver.resolve4(hostname);
     if (addresses && addresses.length > 0) {
@@ -38,19 +40,48 @@ async function universalLookup(hostname, options, callback) {
     }
   } catch (err) {}
 
+  // 2. Try DNS-over-HTTPS (DoH) via Cloudflare to bypass ISP port 53 interception
+  try {
+    const dohRes = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`, {
+      headers: { 'Accept': 'application/dns-json' },
+      signal: AbortSignal.timeout(3500)
+    });
+    if (dohRes.ok) {
+      const json = await dohRes.json();
+      if (json.Answer && json.Answer.length > 0) {
+        const aRecord = json.Answer.find(a => a.type === 1);
+        if (aRecord && aRecord.data) {
+          const ip = aRecord.data;
+          dnsCache.set(hostname, ip);
+          if (options && options.all) return callback(null, [{ address: ip, family: 4 }]);
+          return callback(null, ip, 4);
+        }
+      }
+    }
+  } catch (dohErr) {}
+
+  // 3. Fallback to OS system dns.lookup
   dns.lookup(hostname, options, callback);
 }
 
-https.globalAgent.options.lookup = universalLookup;
-http.globalAgent.options.lookup = universalLookup;
-https.globalAgent.maxSockets = 128;
-http.globalAgent.maxFreeSockets = 64;
-https.globalAgent.keepAlive = true;
-http.globalAgent.keepAliveMsecs = 30000;
-http.globalAgent.maxSockets = 128;
-http.globalAgent.maxFreeSockets = 64;
-http.globalAgent.keepAlive = true;
-http.globalAgent.keepAliveMsecs = 30000;
+const globalHttpsAgent = new https.Agent({
+  lookup: universalLookup,
+  maxSockets: 128,
+  maxFreeSockets: 64,
+  keepAlive: true,
+  keepAliveMsecs: 30000
+});
+
+const globalHttpAgent = new http.Agent({
+  lookup: universalLookup,
+  maxSockets: 128,
+  maxFreeSockets: 64,
+  keepAlive: true,
+  keepAliveMsecs: 30000
+});
+
+https.globalAgent = globalHttpsAgent;
+http.globalAgent = globalHttpAgent;
 
 process.on('uncaughtException', (err) => {
   console.error('[Process Uncaught Exception]:', err.message);
@@ -570,7 +601,8 @@ function decipherFormatUrl(formatUrl) {
 
 function fetchText(targetUrl, headers = {}) {
   return new Promise((resolve, reject) => {
-    const parsed = new URL(targetUrl);
+    let parsed;
+    try { parsed = new URL(targetUrl); } catch (e) { return reject(e); }
     const client = parsed.protocol === 'https:' ? https : http;
     const reqHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -579,7 +611,12 @@ function fetchText(targetUrl, headers = {}) {
       ...headers
     };
 
-    const req = client.get(targetUrl, { headers: reqHeaders, timeout: 12000 }, (res) => {
+    const req = client.get(targetUrl, {
+      headers: reqHeaders,
+      lookup: universalLookup,
+      agent: parsed.protocol === 'https:' ? globalHttpsAgent : globalHttpAgent,
+      timeout: 12000
+    }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return resolve(fetchText(new URL(res.headers.location, targetUrl).toString(), headers));
       }
@@ -620,6 +657,8 @@ function fetchBuffer(targetUrl, headers = {}) {
 
     const req = client.get(targetUrl, {
       headers: reqHeaders,
+      lookup: universalLookup,
+      agent: parsed.protocol === 'https:' ? globalHttpsAgent : globalHttpAgent,
       timeout: 15000
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -842,6 +881,8 @@ function getUrlFileSize(targetUrl, headers = {}) {
     // Direct GET with Range: bytes=0-1 reliably bypasses HEAD blocks and reveals total file size
     const req = client.get(targetUrl, {
       headers: defaultHeaders,
+      lookup: universalLookup,
+      agent: parsed.protocol === 'https:' ? globalHttpsAgent : globalHttpAgent,
       timeout: 12000
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -887,6 +928,8 @@ function fetchRangeBuffer(targetUrl, start, end, headers = {}) {
         'Range': `bytes=${start}-${end}`,
         ...headers
       },
+      lookup: universalLookup,
+      agent: parsed.protocol === 'https:' ? globalHttpsAgent : globalHttpAgent,
       timeout: 25000
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -923,6 +966,8 @@ async function downloadDirectSingleHTTP(directUrl, outputPath, onProgress = null
 
     const req = client.get(directUrl, {
       headers: defaultHeaders,
+      lookup: universalLookup,
+      agent: parsed.protocol === 'https:' ? globalHttpsAgent : globalHttpAgent,
       timeout: 30000
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -1913,6 +1958,12 @@ async function extractCloudFallback(targetUrl) {
         streamUrl.includes('preview') || 
         streamUrl.includes('thumb') || 
         streamUrl.includes('screenshots') ||
+        streamUrl.includes('screenshot') ||
+        streamUrl.includes('mediabook') ||
+        streamUrl.includes('timeline') ||
+        streamUrl.includes('storyboard') ||
+        streamUrl.includes('trailer') ||
+        streamUrl.includes('poster') ||
         streamUrl.includes('/v/') ||
         streamUrl.includes('streamtape')
       ) {
