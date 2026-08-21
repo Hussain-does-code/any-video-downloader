@@ -1173,31 +1173,55 @@ async function extractXHamsterData(pageUrl) {
         const line = streamLines[i].trim();
         if (line.startsWith('#EXT-X-STREAM-INF:')) {
           const resMatch = line.match(/RESOLUTION=(\d+)x(\d+)/i);
+          const nameMatch = line.match(/NAME=["']?(\d+)[pP]?["']?/i);
           const bwMatch = line.match(/BANDWIDTH=(\d+)/i);
           if (resMatch) {
-            currentRes = parseInt(resMatch[2], 10);
-            currentBandwidth = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+            const w = parseInt(resMatch[1], 10);
+            const h = parseInt(resMatch[2], 10);
+            currentRes = (w > 0 && h > 0) ? (w > h ? h : w) : (h || w);
+          } else if (nameMatch) {
+            currentRes = parseInt(nameMatch[1], 10);
           }
-        } else if (line && !line.startsWith('#') && currentRes) {
+          currentBandwidth = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+        } else if (line && !line.startsWith('#')) {
           const fullStreamUrl = new URL(line, masterHlsUrl).toString();
-          if (!seenHeights.has(currentRes)) {
-            seenHeights.add(currentRes);
+          let height = currentRes;
 
-            const is4k = currentRes >= 2160;
-            const is2k = currentRes >= 1440;
-            const is1080 = currentRes >= 1080;
-            const label = is4k ? '4K Ultra HD (2160p)' :
+          if (!height) {
+            const urlMatch = fullStreamUrl.match(/(?:_|\/|-|\.|\b)(4320|2160|1440|1080|720|480|360)[pP]?(?:\.|\/|_|-|\b|$)/i);
+            if (urlMatch) height = parseInt(urlMatch[1], 10);
+          }
+
+          if (!height) {
+            if (currentBandwidth >= 7000000) height = 2160;
+            else if (currentBandwidth >= 4500000) height = 1440;
+            else if (currentBandwidth >= 2800000) height = 1080;
+            else if (currentBandwidth >= 1400000) height = 720;
+            else if (currentBandwidth >= 700000) height = 480;
+            else if (currentBandwidth > 0) height = 360;
+            else height = 1080;
+          }
+
+          if (!seenHeights.has(height)) {
+            seenHeights.add(height);
+
+            const is8k = height >= 4320;
+            const is4k = height >= 2160;
+            const is2k = height >= 1440;
+            const is1080 = height >= 1080;
+            const label = is8k ? '8K Ultra HD (4320p)' :
+                          is4k ? '4K Ultra HD (2160p)' :
                           is2k ? '2K Quad HD (1440p)' :
                           is1080 ? 'Full HD (1080p)' :
-                          currentRes >= 720 ? 'HD (720p)' :
-                          `SD (${currentRes}p)`;
+                          height >= 720 ? 'HD (720p)' :
+                          `SD (${height}p)`;
 
-            const badge = is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : currentRes >= 720 ? 'HD' : 'SD';
+            const badge = is8k ? '8K' : is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
             const approxBytes = duration > 0 && currentBandwidth > 0 ? Math.round((currentBandwidth / 8) * duration) : null;
 
             videoFormats.push({
-              formatId: `hls-${currentRes}`,
-              height: currentRes,
+              formatId: `hls-${height}`,
+              height: height,
               fps: null,
               label: label,
               badge: badge,
@@ -1216,6 +1240,55 @@ async function extractXHamsterData(pageUrl) {
       }
     } catch (hlsErr) {
       console.warn('[XHamster HLS Parse Warning]:', hlsErr.message);
+    }
+  }
+
+  // Also parse direct MP4 sources for 1080p, 720p, 480p, 4K if available
+  const mp4Sources = sources.mp4 || sources.download || sources.progressive || sources.standard || (videoModel.sources && videoModel.sources.mp4) || {};
+  if (typeof mp4Sources === 'object' && mp4Sources !== null) {
+    for (const [qualityKey, rawUrl] of Object.entries(mp4Sources)) {
+      if (!rawUrl) continue;
+      let qHeight = parseHeight(qualityKey);
+      if (!qHeight) {
+        if (/4320|8k/i.test(qualityKey)) qHeight = 4320;
+        else if (/2160|4k/i.test(qualityKey)) qHeight = 2160;
+        else if (/1440|2k/i.test(qualityKey)) qHeight = 1440;
+        else if (/1080/i.test(qualityKey)) qHeight = 1080;
+        else if (/720/i.test(qualityKey)) qHeight = 720;
+        else if (/480/i.test(qualityKey)) qHeight = 480;
+        else if (/360/i.test(qualityKey)) qHeight = 360;
+      }
+      if (qHeight && !seenHeights.has(qHeight)) {
+        const directDeciphered = decipherFormatUrl(typeof rawUrl === 'string' ? rawUrl : (rawUrl.url || rawUrl.fallback || ''));
+        if (directDeciphered) {
+          seenHeights.add(qHeight);
+          const is8k = qHeight >= 4320;
+          const is4k = qHeight >= 2160;
+          const is2k = qHeight >= 1440;
+          const is1080 = qHeight >= 1080;
+          const label = is8k ? '8K Ultra HD (4320p)' :
+                        is4k ? '4K Ultra HD (2160p)' :
+                        is2k ? '2K Quad HD (1440p)' :
+                        is1080 ? 'Full HD (1080p)' :
+                        qHeight >= 720 ? 'HD (720p)' : `SD (${qHeight}p)`;
+          const badge = is8k ? '8K' : is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : qHeight >= 720 ? 'HD' : 'SD';
+          videoFormats.push({
+            formatId: `direct-${qHeight}`,
+            height: qHeight,
+            fps: null,
+            label: label,
+            badge: badge,
+            tbr: null,
+            ext: 'mp4',
+            vcodec: 'h264',
+            hasAudio: true,
+            size: null,
+            sizeFormatted: 'Direct High-Speed Stream',
+            directUrl: directDeciphered,
+            isHls: directDeciphered.includes('.m3u8')
+          });
+        }
+      }
     }
   }
 
@@ -1310,24 +1383,51 @@ async function parseMasterM3u8Streams(masterUrl, referer = '') {
         const line = lines[i].trim();
         if (line.startsWith('#EXT-X-STREAM-INF:')) {
           const resMatch = line.match(/RESOLUTION=(\d+)x(\d+)/i);
+          const nameMatch = line.match(/NAME=["']?(\d+)[pP]?["']?/i);
           const bwMatch = line.match(/BANDWIDTH=(\d+)/i);
           if (resMatch) {
-            currentRes = parseInt(resMatch[2], 10);
-            currentBw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+            const w = parseInt(resMatch[1], 10);
+            const h = parseInt(resMatch[2], 10);
+            currentRes = (w > 0 && h > 0) ? (w > h ? h : w) : (h || w);
+          } else if (nameMatch) {
+            currentRes = parseInt(nameMatch[1], 10);
           }
+          currentBw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
         } else if (line && !line.startsWith('#')) {
           const subUrl = new URL(line, masterUrl).toString();
-          const height = currentRes || 720;
+          let height = currentRes;
+
+          // Infer resolution from subUrl if not found in headers
+          if (!height) {
+            const urlMatch = subUrl.match(/(?:_|\/|-|\.|\b)(4320|2160|1440|1080|720|480|360)[pP]?(?:\.|\/|_|-|\b|$)/i);
+            if (urlMatch) {
+              height = parseInt(urlMatch[1], 10);
+            }
+          }
+
+          // Fallback to bandwidth heuristics
+          if (!height) {
+            if (currentBw >= 7000000) height = 2160;
+            else if (currentBw >= 4500000) height = 1440;
+            else if (currentBw >= 2800000) height = 1080;
+            else if (currentBw >= 1400000) height = 720;
+            else if (currentBw >= 700000) height = 480;
+            else if (currentBw > 0) height = 360;
+            else height = 1080;
+          }
+
           if (!seenHeights.has(height)) {
             seenHeights.add(height);
+            const is8k = height >= 4320;
             const is4k = height >= 2160;
             const is2k = height >= 1440;
             const is1080 = height >= 1080;
-            const label = is4k ? '4K Ultra HD (2160p)' :
+            const label = is8k ? '8K Ultra HD (4320p)' :
+                          is4k ? '4K Ultra HD (2160p)' :
                           is2k ? '2K Quad HD (1440p)' :
                           is1080 ? 'Full HD (1080p)' :
                           height >= 720 ? 'HD (720p)' : `SD (${height}p)`;
-            const badge = is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
+            const badge = is8k ? '8K' : is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
 
             formats.push({
               formatId: `hls-${height}`,
@@ -1631,7 +1731,92 @@ async function extractCloudFallback(targetUrl) {
   const durMatch = html.match(/duration\s*:\s*['"]?(\d+)['"]?/i) || html.match(/length\s*=\s*['"]?(\d+)['"]?/i);
   if (durMatch) duration = parseInt(durMatch[1], 10);
 
-  // 1. Gather all embedded iframe and host URLs
+  const videoFormats = [];
+  const seenDirectUrls = new Set();
+  const seenHeights = new Set();
+
+  // 1. KVS & Tube Flashvars / Direct Player Config Parser
+  const fvMatch = html.match(/var\s+flashvars\s*=\s*\{([\s\S]*?)\};/i) || html.match(/flashvars\s*=\s*\{([\s\S]*?)\};/i);
+  if (fvMatch) {
+    const fv = {};
+    const entries = [...fvMatch[1].matchAll(/([a-zA-Z0-9_]+)\s*:\s*['"]([^'"]+)['"]/g)];
+    entries.forEach(e => { fv[e[1]] = e[2]; });
+
+    function determineHeight(urlKey, textKey, fhdKey, hdKey, previewHeightKey) {
+      if (fv[textKey]) {
+        const m = fv[textKey].match(/(\d+)/);
+        if (m) return parseInt(m[1], 10);
+        if (/4k|2160/i.test(fv[textKey])) return 2160;
+        if (/2k|1440/i.test(fv[textKey])) return 1440;
+        if (/fhd|1080/i.test(fv[textKey])) return 1080;
+        if (/hd|720/i.test(fv[textKey])) return 720;
+      }
+      if (fv[fhdKey] === '1' || fv[fhdKey] === 1) return 1080;
+      if (fv['video_url_4k'] === '1' && urlKey === 'video_url') return 2160;
+      if (fv[previewHeightKey]) {
+        const ph = parseInt(fv[previewHeightKey], 10);
+        if (ph >= 360) return ph;
+      }
+      if (fv[hdKey] === '1' || fv[hdKey] === 1) return 720;
+
+      const u = fv[urlKey] || '';
+      if (/2160|4k/i.test(u)) return 2160;
+      if (/1440|2k/i.test(u)) return 1440;
+      if (/1080/i.test(u)) return 1080;
+      if (/720/i.test(u)) return 720;
+      if (/480/i.test(u)) return 480;
+      if (/360/i.test(u)) return 360;
+
+      return 1080;
+    }
+
+    const candidateUrls = [
+      { urlKey: 'video_url', textKey: 'video_url_text', fhdKey: 'video_url_fhd', hdKey: 'video_url_hd', phKey: 'preview_height1' },
+      { urlKey: 'video_alt_url', textKey: 'video_alt_url_text', fhdKey: 'video_alt_url_fhd', hdKey: 'video_alt_url_hd', phKey: 'preview_height2' },
+      { urlKey: 'video_alt_url2', textKey: 'video_alt_url2_text', fhdKey: 'video_alt_url2_fhd', hdKey: 'video_alt_url2_hd', phKey: 'preview_height3' },
+      { urlKey: 'video_alt_url3', textKey: 'video_alt_url3_text', fhdKey: 'video_alt_url3_fhd', hdKey: 'video_alt_url3_hd', phKey: 'preview_height4' },
+      { urlKey: 'video_alt_url4', textKey: 'video_alt_url4_text', fhdKey: 'video_alt_url4_fhd', hdKey: 'video_alt_url4_hd', phKey: 'preview_height5' }
+    ];
+
+    for (const c of candidateUrls) {
+      const directStreamUrl = fv[c.urlKey];
+      if (directStreamUrl && (directStreamUrl.startsWith('http') || directStreamUrl.startsWith('//'))) {
+        const fullStreamUrl = directStreamUrl.startsWith('//') ? `https:${directStreamUrl}` : directStreamUrl;
+        const height = determineHeight(c.urlKey, c.textKey, c.fhdKey, c.hdKey, c.phKey);
+        if (!seenHeights.has(height)) {
+          seenHeights.add(height);
+          const is8k = height >= 4320;
+          const is4k = height >= 2160;
+          const is2k = height >= 1440;
+          const is1080 = height >= 1080;
+          const badge = is8k ? '8K' : is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
+          const label = is8k ? '8K Ultra HD (4320p)' :
+                        is4k ? '4K Ultra HD (2160p)' :
+                        is2k ? '2K Quad HD (1440p)' :
+                        is1080 ? 'Full HD (1080p)' :
+                        height >= 720 ? 'HD (720p)' : `SD (${height}p)`;
+
+          videoFormats.push({
+            formatId: `kvs-${height}`,
+            height: height,
+            fps: 30,
+            label: label,
+            badge: badge,
+            tbr: null,
+            ext: 'mp4',
+            vcodec: 'h264',
+            hasAudio: true,
+            size: null,
+            sizeFormatted: 'Direct High Quality Stream',
+            directUrl: fullStreamUrl,
+            isHls: fullStreamUrl.includes('.m3u8')
+          });
+        }
+      }
+    }
+  }
+
+  // 2. Gather all embedded iframe and host URLs
   const iframes = [...html.matchAll(/<iframe[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
   const candidateEmbeds = new Set(iframes);
 
@@ -1643,10 +1828,6 @@ async function extractCloudFallback(targetUrl) {
   }
 
   console.log(`[Cloud Fallback] Found ${candidateEmbeds.size} embed candidates to probe...`);
-
-  const videoFormats = [];
-  const seenDirectUrls = new Set();
-  const seenHeights = new Set();
 
   for (const embedUrl of candidateEmbeds) {
     let resolved = null;
@@ -1677,20 +1858,27 @@ async function extractCloudFallback(targetUrl) {
         }
       }
 
-      // If no sub-variants were parsed (or direct single stream), add standard high quality format
+      // If no sub-variants were parsed (or direct single stream), detect best quality from stream & page
       if (videoFormats.length === 0 || !resolved.isHls) {
-        let height = 720;
-        if (/2160|4[kK]/i.test(resolved.streamUrl)) height = 2160;
-        else if (/1440|2[kK]/i.test(resolved.streamUrl)) height = 1440;
-        else if (/1080/i.test(resolved.streamUrl)) height = 1080;
+        const combined = `${resolved.streamUrl} ${embedUrl} ${title} ${html}`;
+        let height = 1080;
+        if (/\b(?:8[kK]|4320[pP]?)\b/i.test(combined)) height = 4320;
+        else if (/\b(?:4[kK]|2160[pP]?|UHD)\b/i.test(combined)) height = 2160;
+        else if (/\b(?:2[kK]|1440[pP]?|QHD)\b/i.test(combined)) height = 1440;
+        else if (/\b(?:1080[pP]?|Full\s*HD|FHD)\b/i.test(combined)) height = 1080;
+        else if (/\b(?:720[pP]?|HD)\b/i.test(combined)) height = 720;
+        else if (/\b(?:480[pP]?)\b/i.test(combined)) height = 480;
+        else if (/\b(?:360[pP]?)\b/i.test(combined)) height = 360;
 
         if (!seenHeights.has(height)) {
           seenHeights.add(height);
+          const is8k = height >= 4320;
           const is4k = height >= 2160;
           const is2k = height >= 1440;
           const is1080 = height >= 1080;
-          const badge = is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
-          const label = is4k ? '4K Ultra HD (2160p)' :
+          const badge = is8k ? '8K' : is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
+          const label = is8k ? '8K Ultra HD (4320p)' :
+                        is4k ? '4K Ultra HD (2160p)' :
                         is2k ? '2K Quad HD (1440p)' :
                         is1080 ? 'Full HD (1080p)' :
                         height >= 720 ? 'HD (720p)' : `SD (${height}p)`;
@@ -1706,7 +1894,7 @@ async function extractCloudFallback(targetUrl) {
             vcodec: 'h264',
             hasAudio: true,
             size: null,
-            sizeFormatted: 'Best HD Quality',
+            sizeFormatted: 'Best Available HD Quality',
             directUrl: resolved.streamUrl,
             isHls: resolved.isHls
           });
@@ -1732,19 +1920,25 @@ async function extractCloudFallback(targetUrl) {
       }
       seenDirectUrls.add(streamUrl);
 
-      let height = 720;
-      if (/2160|4[kK]/i.test(streamUrl)) height = 2160;
-      else if (/1440|2[kK]/i.test(streamUrl)) height = 1440;
-      else if (/1080/i.test(streamUrl)) height = 1080;
-      else if (/480/i.test(streamUrl)) height = 480;
+      const combined = `${streamUrl} ${title} ${html}`;
+      let height = 1080;
+      if (/\b(?:8[kK]|4320[pP]?)\b/i.test(combined)) height = 4320;
+      else if (/\b(?:4[kK]|2160[pP]?|UHD)\b/i.test(combined)) height = 2160;
+      else if (/\b(?:2[kK]|1440[pP]?|QHD)\b/i.test(combined)) height = 1440;
+      else if (/\b(?:1080[pP]?|Full\s*HD|FHD)\b/i.test(combined)) height = 1080;
+      else if (/\b(?:720[pP]?|HD)\b/i.test(combined)) height = 720;
+      else if (/\b(?:480[pP]?)\b/i.test(combined)) height = 480;
+      else if (/\b(?:360[pP]?)\b/i.test(combined)) height = 360;
 
       if (!seenHeights.has(height)) {
         seenHeights.add(height);
+        const is8k = height >= 4320;
         const is4k = height >= 2160;
         const is2k = height >= 1440;
         const is1080 = height >= 1080;
-        const badge = is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
-        const label = is4k ? '4K Ultra HD (2160p)' :
+        const badge = is8k ? '8K' : is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
+        const label = is8k ? '8K Ultra HD (4320p)' :
+                      is4k ? '4K Ultra HD (2160p)' :
                       is2k ? '2K Quad HD (1440p)' :
                       is1080 ? 'Full HD (1080p)' :
                       height >= 720 ? 'HD (720p)' : `SD (${height}p)`;
@@ -1888,7 +2082,7 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
     '--no-playlist',
     '--no-warnings',
     '--ffmpeg-location', getFfmpegPath(),
-    '--extractor-args', 'youtube:player-client=default,tv_simply',
+    '--extractor-args', 'youtube:player_client=default,web,android,ios,mweb',
     '--js-runtimes', 'node',
     '-j',
     trimmedUrl
@@ -2043,30 +2237,37 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
         }
 
         let height = f.height || 0;
+        if (!height && f.resolution) {
+          const m = f.resolution.match(/(\d+)x(\d+)/);
+          if (m) {
+            const w = parseInt(m[1], 10);
+            const h = parseInt(m[2], 10);
+            height = (w > 0 && h > 0) ? (w > h ? h : w) : (h || w);
+          }
+        }
         if (!height && f.format_note) {
           const m = f.format_note.match(/(\d+)[pP]/);
           if (m) height = parseInt(m[1], 10);
-        }
-        if (!height && f.resolution) {
-          const m = f.resolution.match(/(\d+)x(\d+)/);
-          if (m) height = parseInt(m[2], 10);
         }
         if (!height && f.format) {
           const m = f.format.match(/(\d+)[pP]/);
           if (m) height = parseInt(m[1], 10);
         }
+        if (!height && f.width && f.height) {
+          height = Math.min(f.width, f.height);
+        }
 
         // Infer resolution from URL, format_id, format_note, or title
         if (!height) {
           const combinedStr = `${f.url || ''} ${f.format_id || ''} ${f.format_note || ''} ${f.format || ''} ${info.title || ''}`;
-          if (/\b8[kK]\b|4320[pP]?/i.test(combinedStr)) height = 4320;
-          else if (/\b4[kK]\b|2160[pP]?/i.test(combinedStr)) height = 2160;
-          else if (/\b2[kK]\b|1440[pP]?/i.test(combinedStr)) height = 1440;
-          else if (/1080[pP]?/i.test(combinedStr)) height = 1080;
-          else if (/720[pP]?/i.test(combinedStr)) height = 720;
-          else if (/480[pP]?/i.test(combinedStr)) height = 480;
-          else if (/360[pP]?/i.test(combinedStr)) height = 360;
-          else height = info.height || 1080; // Fallback to 1080p if video stream exists without explicit height
+          if (/\b(?:8[kK]|4320[pP]?)\b/i.test(combinedStr)) height = 4320;
+          else if (/\b(?:4[kK]|2160[pP]?|UHD)\b/i.test(combinedStr)) height = 2160;
+          else if (/\b(?:2[kK]|1440[pP]?|QHD)\b/i.test(combinedStr)) height = 1440;
+          else if (/\b(?:1080[pP]?|Full\s*HD|FHD)\b/i.test(combinedStr)) height = 1080;
+          else if (/\b(?:720[pP]?|HD)\b/i.test(combinedStr)) height = 720;
+          else if (/\b(?:480[pP]?)\b/i.test(combinedStr)) height = 480;
+          else if (/\b(?:360[pP]?)\b/i.test(combinedStr)) height = 360;
+          else height = info.height || 1080;
         }
 
         const fps = (f.fps && f.fps > 30) ? Math.round(f.fps) : null;
@@ -2105,7 +2306,8 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
 
         const validDirectUrl = isDirectHls ? f.url : (isStandaloneFile ? f.url : null);
 
-        if (!existing || (f.ext === 'mp4' && existing.ext !== 'mp4') || (currentTbr > 0 && (!existing.tbr || currentTbr < existing.tbr * 3))) {
+        // Keep highest bitrate and preferred format for this height
+        if (!existing || (currentTbr > (existing.tbr || 0)) || (f.ext === 'mp4' && existing.ext !== 'mp4' && currentTbr >= (existing.tbr || 0) * 0.75)) {
           seenHeights.set(height, {
             formatId: f.format_id,
             height: height,
@@ -2370,7 +2572,7 @@ app.post('/api/download', downloadRateLimiter, async (req, res) => {
     '--retries', '10',
     '--fragment-retries', '10',
     '--ffmpeg-location', getFfmpegPath(),
-    '--extractor-args', 'youtube:player-client=default,tv_simply',
+    '--extractor-args', 'youtube:player_client=default,web,android,ios,mweb',
     '--js-runtimes', 'node',
     '-o', localSavedPath
   ];
