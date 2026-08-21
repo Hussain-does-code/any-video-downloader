@@ -680,6 +680,24 @@ function fetchBuffer(targetUrl, headers = {}) {
   });
 }
 
+function stripDummyHeader(buf) {
+  if (!buf || buf.length < 188) return buf;
+  if (
+    (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) ||
+    (buf[0] === 0xff && buf[1] === 0xd8) ||
+    (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) ||
+    (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) ||
+    buf[0] !== 0x47
+  ) {
+    for (let i = 0; i < Math.min(4096, buf.length - 188 * 3); i++) {
+      if (buf[i] === 0x47 && buf[i + 188] === 0x47 && buf[i + 376] === 0x47) {
+        return buf.subarray(i);
+      }
+    }
+  }
+  return buf;
+}
+
 async function downloadHLSParallel(m3u8Url, outputPath, isAudio = false, onProgress = null, abortController = null, customHeaders = {}) {
   console.log(`[Parallel HLS Downloader] Fetching manifest: ${m3u8Url}`);
   let targetM3u8 = m3u8Url;
@@ -779,10 +797,11 @@ async function downloadHLSParallel(m3u8Url, outputPath, isAudio = false, onProgr
             activeWorkers--;
             if (isFinished || hasError) return;
 
-            nextItem.buffer = buf;
+            const cleanBuf = stripDummyHeader(buf);
+            nextItem.buffer = cleanBuf;
             nextItem.status = 'done';
             downloadedCount++;
-            totalBytesReceived += buf.length;
+            totalBytesReceived += cleanBuf.length;
 
             // Flush completed buffers to disk sequentially
             while (nextToWrite < totalSegments && segments[nextToWrite].status === 'done') {
@@ -830,7 +849,10 @@ async function downloadHLSParallel(m3u8Url, outputPath, isAudio = false, onProgr
 
   // Remux TS stream to clean MP4 or MP3 using FFmpeg
   return new Promise((resolve, reject) => {
-    const ffmpegArgs = ['-i', tempTsPath];
+    const ffmpegArgs = [
+      '-fflags', '+genpts+discardcorrupt',
+      '-i', tempTsPath
+    ];
 
     if (isAudio) {
       ffmpegArgs.push('-vn', '-c:a', 'libmp3lame', '-q:a', '0', '-y', outputPath);
