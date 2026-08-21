@@ -2154,19 +2154,26 @@ app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
   ytdlp.on('close', async (code) => {
     if (code !== 0 || !stdoutData.trim()) {
       console.warn(`[yt-dlp Failed (code ${code})]: Attempting Automated Cloud Fallback Extractor for ${trimmedUrl}...`);
+      let cloudSuccess = false;
+      let cloudHtmlFetched = false;
       
       try {
         const cloudData = await extractCloudFallback(trimmedUrl);
-        if (cloudData && cloudData.videoFormats && cloudData.videoFormats.length > 0) {
-          console.log(`[Cloud Fallback Success]: Extracted ${cloudData.videoFormats.length} video stream formats without VPN!`);
-          return res.json({ ok: true, data: cloudData });
+        if (cloudData) {
+          cloudHtmlFetched = true;
+          if (cloudData.videoFormats && cloudData.videoFormats.length > 0) {
+            console.log(`[Cloud Fallback Success]: Extracted ${cloudData.videoFormats.length} video stream formats without VPN!`);
+            return res.json({ ok: true, data: cloudData });
+          }
         }
       } catch (cloudErr) {
         console.warn('[Cloud Fallback Also Failed]:', cloudErr.message);
       }
 
       console.error(`[Analyze Error] code ${code}: ${stderrData}`);
-      let userError = 'Could not fetch video information. Please make sure the link is public and accessible.';
+      let userError = cloudHtmlFetched
+        ? 'No playable video stream found on this webpage. This page appears to be an ad portal or thumbnail preview without an embedded video file. Please use a direct video link from a supported provider.'
+        : 'Could not fetch video information. Please make sure the link is public and accessible.';
       
       if (
         stderrData.includes('Failed to resolve') ||
