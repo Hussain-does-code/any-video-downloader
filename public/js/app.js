@@ -202,8 +202,14 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({ url })
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) {
+        if (res.status === 429) {
+          const retrySec = json.retryAfter || 15;
+          showToast(`Rate limit reached: Please wait ${retrySec}s`, 'warning', 'fa-clock');
+          showError('Rate Limit Exceeded', json.error || `You are submitting requests too quickly. Please wait ${retrySec} seconds before analyzing another URL.`);
+          return;
+        }
         throw new Error(json.error || 'Failed to analyze video stream.');
       }
 
@@ -484,8 +490,13 @@ document.addEventListener('DOMContentLoaded', () => {
         })
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) {
+        if (res.status === 429) {
+          const retrySec = json.retryAfter || 15;
+          showToast(json.error || `Download rate limit reached. Please wait ${retrySec}s.`, 'warning', 'fa-clock');
+          return;
+        }
         throw new Error(json.error || 'Could not start download pipeline.');
       }
 
@@ -709,15 +720,6 @@ document.addEventListener('DOMContentLoaded', () => {
               </a>
             `;
             actions.classList.remove('hidden');
-
-            // Automatically open direct download link
-            const a = document.createElement('a');
-            a.href = streamUrl;
-            a.download = `${safeTitle}.mp4`;
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
           }
 
           eventSource.close();

@@ -1,4 +1,5 @@
 const express = require('express');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
@@ -42,6 +43,14 @@ async function universalLookup(hostname, options, callback) {
 
 https.globalAgent.options.lookup = universalLookup;
 http.globalAgent.options.lookup = universalLookup;
+https.globalAgent.maxSockets = 128;
+http.globalAgent.maxFreeSockets = 64;
+https.globalAgent.keepAlive = true;
+http.globalAgent.keepAliveMsecs = 30000;
+http.globalAgent.maxSockets = 128;
+http.globalAgent.maxFreeSockets = 64;
+http.globalAgent.keepAlive = true;
+http.globalAgent.keepAliveMsecs = 30000;
 
 process.on('uncaughtException', (err) => {
   console.error('[Process Uncaught Exception]:', err.message);
@@ -309,44 +318,120 @@ app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 app.use(express.static(path.join(ROOT_DIR, 'public')));
 
-// Rate Limiting Defense (Manny's Rule: Protect against automated flooding & DoS)
-const requestCounts = new Map();
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
-const MAX_REQUESTS_PER_WINDOW = 60;     // Max 60 requests per min per IP
+// ─── K37 Cloud Rate Limiting & Abuse Defense Architecture ───
+function getClientIp(req) {
+  const cfIp = req.headers['cf-connecting-ip'];
+  const realIp = req.headers['x-real-ip'];
+  const forwarded = req.headers['x-forwarded-for'];
+  let ip = cfIp || realIp;
+  if (!ip && forwarded && typeof forwarded === 'string') {
+    ip = forwarded.split(',')[0].trim();
+  }
+  if (!ip) {
+    ip = req.ip || (req.socket && req.socket.remoteAddress) || '127.0.0.1';
+  }
+  return typeof ip === 'string' ? ip.replace(/^::ffff:/, '') : '127.0.0.1';
+}
 
-// Garbage collector for rate limiter memory
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, data] of requestCounts.entries()) {
-    if (now > data.resetTime) {
-      requestCounts.delete(ip);
+function createJsonLimiter({ windowMs, max, message, code }) {
+  return rateLimit({
+    windowMs,
+    limit: max,
+    standardHeaders: true, // draft-6 / draft-7 combined: RateLimit-*
+    legacyHeaders: true,   // X-RateLimit-*
+    validate: { trustProxy: false, keyGeneratorIpFallback: false },
+    keyGenerator: (req) => ipKeyGenerator(getClientIp(req)),
+    handler: (req, res, next, options) => {
+      const resetTime = req.rateLimit?.resetTime?.getTime ? req.rateLimit.resetTime.getTime() : (Date.now() + windowMs);
+      const retryAfter = Math.max(1, Math.ceil((resetTime - Date.now()) / 1000));
+      res.setHeader('Retry-After', retryAfter.toString());
+      res.status(options.statusCode || 429).json({
+        ok: false,
+        error: message || 'Too many requests. Rate limit exceeded. Please wait before trying again.',
+        code: code || 'RATE_LIMIT_EXCEEDED',
+        retryAfter: retryAfter,
+        limit: options.limit,
+        windowSec: Math.ceil(windowMs / 1000)
+      });
     }
-  }
-}, 5 * 60 * 1000);
+  });
+}
 
-app.use('/api/', (req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
-  const now = Date.now();
-  const clientData = requestCounts.get(ip) || { count: 0, resetTime: now + RATE_LIMIT_WINDOW_MS };
-
-  if (now > clientData.resetTime) {
-    clientData.count = 1;
-    clientData.resetTime = now + RATE_LIMIT_WINDOW_MS;
-  } else {
-    clientData.count++;
-  }
-
-  requestCounts.set(ip, clientData);
-
-  if (clientData.count > MAX_REQUESTS_PER_WINDOW) {
-    return res.status(429).json({
-      ok: false,
-      error: 'Too many requests. Rate limit exceeded. Please wait a moment before trying again.'
-    });
-  }
-
-  next();
+// Tier 1: Global Shield (Protects entire API against volumetric DDoS / fuzzers)
+const globalRateLimiter = createJsonLimiter({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_GLOBAL_MAX, 10) || 200,
+  message: 'Global rate limit exceeded: Too many requests from your IP. Please slow down.',
+  code: 'GLOBAL_RATE_LIMIT_EXCEEDED'
 });
+
+// Tier 2: Video Analysis Probing (Heavy CPU / scraping prevention)
+const analyzeRateLimiter = createJsonLimiter({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_ANALYZE_MAX, 10) || 20,
+  message: 'Rate limit exceeded: Too many video analysis requests. Please wait a few seconds before analyzing another URL.',
+  code: 'ANALYZE_RATE_LIMIT_EXCEEDED'
+});
+
+// Tier 3: Download Initiation (Spawns heavy yt-dlp/ffmpeg worker processes)
+const downloadRateLimiter = createJsonLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_DOWNLOAD_MAX, 10) || 25,
+  message: 'Rate limit exceeded: Download quota reached. Please wait before starting new downloads.',
+  code: 'DOWNLOAD_RATE_LIMIT_EXCEEDED'
+});
+
+// Tier 4: Image Thumbnail Proxy (Outbound HTTP proxying / SSRF rate guard)
+const proxyRateLimiter = createJsonLimiter({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_PROXY_MAX, 10) || 45,
+  message: 'Rate limit exceeded: Too many thumbnail preview requests. Please try again shortly.',
+  code: 'PROXY_RATE_LIMIT_EXCEEDED'
+});
+
+// Tier 5: High-Bandwidth File Streaming (Protects socket & disk bandwidth)
+const fileDeliveryLimiter = createJsonLimiter({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_FILE_MAX, 10) || 30,
+  message: 'Rate limit exceeded: Too many file downloads in a short period. Please wait.',
+  code: 'FILE_RATE_LIMIT_EXCEEDED'
+});
+
+// Tier 6: Lightweight Status & Progress Polling
+const pollingRateLimiter = createJsonLimiter({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_POLL_MAX, 10) || 120,
+  message: 'Rate limit exceeded: Too many status/polling requests.',
+  code: 'POLL_RATE_LIMIT_EXCEEDED'
+});
+
+// ─── IP Concurrency Guard for Cloud Compute Starvation Defense ───
+const activeDownloadsPerIp = new Map();
+const downloadIdToIp = new Map();
+const MAX_CONCURRENT_DOWNLOADS_PER_IP = parseInt(process.env.RATE_LIMIT_CONCURRENT_MAX, 10) || 2;
+
+function claimIpDownloadSlot(ip, downloadId) {
+  if (!ip || !downloadId) return;
+  const current = activeDownloadsPerIp.get(ip) || 0;
+  activeDownloadsPerIp.set(ip, current + 1);
+  downloadIdToIp.set(downloadId, ip);
+}
+
+function releaseIpDownloadSlot(downloadId) {
+  if (!downloadId) return;
+  const ip = downloadIdToIp.get(downloadId);
+  if (!ip) return;
+  downloadIdToIp.delete(downloadId);
+  const count = activeDownloadsPerIp.get(ip) || 0;
+  if (count <= 1) {
+    activeDownloadsPerIp.delete(ip);
+  } else {
+    activeDownloadsPerIp.set(ip, count - 1);
+  }
+}
+
+// Mount Global Rate Limiter across all routes
+app.use(globalRateLimiter);
 
 // In-Memory store for active downloads & SSE progress listeners
 const activeDownloads = new Map();
@@ -524,20 +609,23 @@ function isXHamsterUrl(url) {
 // ============================================================================
 function fetchBuffer(targetUrl, headers = {}) {
   return new Promise((resolve, reject) => {
-    const parsed = new URL(targetUrl);
+    let parsed;
+    try { parsed = new URL(targetUrl); } catch (e) { return reject(e); }
     const client = parsed.protocol === 'https:' ? https : http;
+    const reqHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Referer': `${parsed.protocol}//${parsed.hostname}/`,
+      ...headers
+    };
+
     const req = client.get(targetUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Referer': 'https://xhnetwork.life/',
-        ...headers
-      },
+      headers: reqHeaders,
       timeout: 15000
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return resolve(fetchBuffer(new URL(res.headers.location, targetUrl).toString(), headers));
       }
-      if (res.statusCode !== 200) {
+      if (res.statusCode !== 200 && res.statusCode !== 206) {
         return reject(new Error(`HTTP ${res.statusCode} on segment`));
       }
       const chunks = [];
@@ -553,14 +641,40 @@ function fetchBuffer(targetUrl, headers = {}) {
   });
 }
 
-async function downloadHLSParallel(m3u8Url, outputPath, isAudio = false, onProgress = null, abortController = null) {
+async function downloadHLSParallel(m3u8Url, outputPath, isAudio = false, onProgress = null, abortController = null, customHeaders = {}) {
   console.log(`[Parallel HLS Downloader] Fetching manifest: ${m3u8Url}`);
-  const manifest = await fetchText(m3u8Url, { Referer: 'https://xhnetwork.life/' });
+  let targetM3u8 = m3u8Url;
+  let manifest = await fetchText(targetM3u8, customHeaders);
   
+  // If master playlist with multiple variant streams, resolve best/target variant stream
+  if (manifest.includes('#EXT-X-STREAM-INF:')) {
+    const lines = manifest.split('\n');
+    let bestStreamUrl = null;
+    let maxBw = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith('#EXT-X-STREAM-INF:')) {
+        const bwMatch = line.match(/BANDWIDTH=(\d+)/i);
+        const bw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+        const nextLine = lines[i + 1]?.trim();
+        if (nextLine && !nextLine.startsWith('#')) {
+          if (!bestStreamUrl || bw >= maxBw) {
+            maxBw = bw;
+            bestStreamUrl = new URL(nextLine, targetM3u8).toString();
+          }
+        }
+      }
+    }
+    if (bestStreamUrl) {
+      targetM3u8 = bestStreamUrl;
+      manifest = await fetchText(targetM3u8, customHeaders);
+    }
+  }
+
   const segmentUrls = manifest.split('\n')
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith('#'))
-    .map((l) => new URL(l, m3u8Url).toString());
+    .map((l) => new URL(l, targetM3u8).toString());
 
   if (segmentUrls.length === 0) {
     throw new Error('No video segments found in playlist.');
@@ -572,41 +686,69 @@ async function downloadHLSParallel(m3u8Url, outputPath, isAudio = false, onProgr
   const tempTsPath = outputPath + `.temp_${Date.now()}.ts`;
   const outStream = fs.createWriteStream(tempTsPath);
 
-  const buffers = new Map();
+  const segments = segmentUrls.map((url, index) => ({
+    index,
+    url,
+    status: 'pending',
+    attempts: 0,
+    buffer: null
+  }));
+
   let nextToWrite = 0;
   let downloadedCount = 0;
   let totalBytesReceived = 0;
-  let active = 0;
-  let nextToFetch = 0;
+  let activeWorkers = 0;
+  let isFinished = false;
+  let hasError = false;
   const concurrency = 16;
   const startTime = Date.now();
 
   await new Promise((resolve, reject) => {
-    function schedule() {
+    function finish(err) {
+      if (isFinished) return;
+      isFinished = true;
+      try { outStream.end(); } catch (e) {}
+      if (err) {
+        hasError = true;
+        try { fs.unlinkSync(tempTsPath); } catch (e) {}
+        return reject(err);
+      }
+      resolve();
+    }
+
+    function pump() {
+      if (isFinished || hasError) return;
+
       if (abortController?.signal?.aborted) {
-        try { outStream.end(); fs.unlinkSync(tempTsPath); } catch (e) {}
-        return reject(new Error('CANCELLED'));
+        return finish(new Error('CANCELLED'));
       }
+
       if (nextToWrite === totalSegments) {
-        outStream.end();
-        return resolve();
+        return finish();
       }
 
-      while (active < concurrency && nextToFetch < totalSegments) {
-        const idx = nextToFetch++;
-        active++;
+      while (activeWorkers < concurrency) {
+        const nextItem = segments.find(s => s.status === 'pending');
+        if (!nextItem) break;
 
-        fetchBuffer(segmentUrls[idx])
+        nextItem.status = 'downloading';
+        nextItem.attempts++;
+        activeWorkers++;
+
+        fetchBuffer(nextItem.url, customHeaders)
           .then((buf) => {
-            active--;
+            activeWorkers--;
+            if (isFinished || hasError) return;
+
+            nextItem.buffer = buf;
+            nextItem.status = 'done';
             downloadedCount++;
             totalBytesReceived += buf.length;
-            buffers.set(idx, buf);
 
-            // Write downloaded buffers to disk in strict sequence
-            while (buffers.has(nextToWrite)) {
-              outStream.write(buffers.get(nextToWrite));
-              buffers.delete(nextToWrite);
+            // Flush completed buffers to disk sequentially
+            while (nextToWrite < totalSegments && segments[nextToWrite].status === 'done') {
+              outStream.write(segments[nextToWrite].buffer);
+              segments[nextToWrite].buffer = null; // Free memory
               nextToWrite++;
             }
 
@@ -628,17 +770,23 @@ async function downloadHLSParallel(m3u8Url, outputPath, isAudio = false, onProgr
               });
             }
 
-            schedule();
+            pump();
           })
           .catch((err) => {
-            active--;
-            console.warn(`[Retry Segment ${idx}]:`, err.message);
-            nextToFetch = Math.min(nextToFetch, idx);
-            setTimeout(schedule, 500);
+            activeWorkers--;
+            if (isFinished || hasError) return;
+
+            if (nextItem.attempts < 5) {
+              nextItem.status = 'pending';
+              setTimeout(pump, 500);
+            } else {
+              finish(new Error(`Failed to download segment ${nextItem.index}: ${err.message}`));
+            }
           });
       }
     }
-    schedule();
+
+    pump();
   });
 
   // Remux TS stream to clean MP4 or MP3 using FFmpeg
@@ -680,48 +828,44 @@ function getUrlFileSize(targetUrl, headers = {}) {
     const client = parsed.protocol === 'https:' ? https : http;
     const defaultHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Encoding': 'identity;q=1, *;q=0',
       'Referer': `${parsed.protocol}//${parsed.hostname}/`,
       'Origin': `${parsed.protocol}//${parsed.hostname}`,
+      'Sec-Fetch-Dest': 'video',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'Range': 'bytes=0-1',
       ...headers
     };
 
-    const req = client.request(targetUrl, {
-      method: 'HEAD',
+    // Direct GET with Range: bytes=0-1 reliably bypasses HEAD blocks and reveals total file size
+    const req = client.get(targetUrl, {
       headers: defaultHeaders,
-      timeout: 10000
+      timeout: 12000
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        req.destroy();
         return resolve(getUrlFileSize(new URL(res.headers.location, targetUrl).toString(), headers));
       }
-      const len = parseInt(res.headers['content-length'], 10);
-      const acceptsRanges = res.headers['accept-ranges'] === 'bytes' || !isNaN(len);
-      if (len > 0) {
-        return resolve({ size: len, acceptsRanges });
+
+      const cr = res.headers['content-range'];
+      if (cr) {
+        const match = cr.match(/\/(\d+)/);
+        if (match) {
+          req.destroy();
+          return resolve({ size: parseInt(match[1], 10), acceptsRanges: true });
+        }
       }
 
-      // Fallback: Try GET with Range bytes=0-10
-      const getProbe = client.request(targetUrl, {
-        method: 'GET',
-        headers: { ...defaultHeaders, 'Range': 'bytes=0-10' },
-        timeout: 10000
-      }, (probeRes) => {
-        const cr = probeRes.headers['content-range'];
-        if (cr) {
-          const match = cr.match(/\/(\d+)/);
-          if (match) {
-            return resolve({ size: parseInt(match[1], 10), acceptsRanges: true });
-          }
-        }
-        const cl = parseInt(probeRes.headers['content-length'], 10);
-        resolve({ size: cl > 0 ? cl : 0, acceptsRanges: probeRes.statusCode === 206 });
-      });
-      getProbe.on('error', () => resolve({ size: 0, acceptsRanges: false }));
-      getProbe.on('timeout', () => { getProbe.destroy(); resolve({ size: 0, acceptsRanges: false }); });
-      getProbe.end();
+      const len = parseInt(res.headers['content-length'] || '0', 10);
+      const acceptsRanges = res.headers['accept-ranges'] === 'bytes' || res.statusCode === 206;
+      req.destroy();
+      resolve({ size: len > 0 ? len : 0, acceptsRanges: acceptsRanges || len > 0 });
     });
+
     req.on('timeout', () => { req.destroy(); resolve({ size: 0, acceptsRanges: false }); });
     req.on('error', () => resolve({ size: 0, acceptsRanges: false }));
-    req.end();
   });
 }
 
@@ -733,8 +877,13 @@ function fetchRangeBuffer(targetUrl, start, end, headers = {}) {
     const req = client.get(targetUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Encoding': 'identity;q=1, *;q=0',
         'Referer': `${parsed.protocol}//${parsed.hostname}/`,
         'Origin': `${parsed.protocol}//${parsed.hostname}`,
+        'Sec-Fetch-Dest': 'video',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'cross-site',
         'Range': `bytes=${start}-${end}`,
         ...headers
       },
@@ -763,8 +912,13 @@ async function downloadDirectSingleHTTP(directUrl, outputPath, onProgress = null
     const client = parsed.protocol === 'https:' ? https : http;
     const defaultHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Encoding': 'identity;q=1, *;q=0',
       'Referer': `${parsed.protocol}//${parsed.hostname}/`,
-      'Origin': `${parsed.protocol}//${parsed.hostname}`
+      'Origin': `${parsed.protocol}//${parsed.hostname}`,
+      'Sec-Fetch-Dest': 'video',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site'
     };
 
     const req = client.get(directUrl, {
@@ -836,15 +990,17 @@ async function downloadDirectSingleHTTP(directUrl, outputPath, onProgress = null
 async function downloadDirectParallelHTTP(directUrl, outputPath, onProgress = null, abortController = null) {
   console.log(`[Parallel HTTP Downloader] Probing file size: ${directUrl}`);
   const { size: totalBytes, acceptsRanges } = await getUrlFileSize(directUrl);
-  if (!totalBytes || totalBytes < 2 * 1024 * 1024 || !acceptsRanges) {
-    console.log('[Parallel HTTP Downloader] Range chunking unsupported; falling back to direct stream download...');
+  if (!totalBytes || totalBytes < 1024 * 1024 || !acceptsRanges) {
+    console.log('[Parallel HTTP Downloader] Range chunking unsupported or small file; streaming direct...');
     return downloadDirectSingleHTTP(directUrl, outputPath, onProgress, abortController);
   }
 
-  console.log(`[Parallel HTTP Downloader] Downloading ${formatBytes(totalBytes)} across 6 parallel workers...`);
-  const concurrency = 6;
-  const chunkSize = 4 * 1024 * 1024;
+  // 16 to 24 parallel worker threads to multiply speed and bypass 60kbps connection rate limits
+  const concurrency = 16;
+  const chunkSize = 2 * 1024 * 1024; // 2MB chunk slices
   const numChunks = Math.ceil(totalBytes / chunkSize);
+  console.log(`[Parallel HTTP Downloader] Downloading ${formatBytes(totalBytes)} across ${numChunks} chunks (${concurrency} parallel workers)...`);
+
   const chunks = [];
   for (let i = 0; i < numChunks; i++) {
     const start = i * chunkSize;
@@ -941,12 +1097,12 @@ async function downloadDirectParallelHTTP(directUrl, outputPath, onProgress = nu
             if (isFinished || hasError) return;
 
             console.warn(`[Retry Range Chunk ${nextChunk.index} (attempt ${nextChunk.attempts})]:`, err.message);
-            if (nextChunk.attempts > 5) {
-              console.warn('[Parallel Downloader] Chunk failed 5 times; falling back to single stream...');
+            if (nextChunk.attempts > 6) {
+              console.warn('[Parallel Downloader] Chunk failed 6 times; falling back to single stream...');
               finish(new Error('PARALLEL_FAILED'));
             } else {
               nextChunk.status = 'pending';
-              setTimeout(pump, 500);
+              setTimeout(pump, 400);
             }
           });
       }
@@ -1096,9 +1252,294 @@ async function extractXHamsterData(pageUrl) {
 }
 
 // ─── Cloud Gateway & Direct Stream Fallback Extractor (Bypasses ISP/DNS Blocks without VPN) ───
+// JS Unpacker (eval(function(p,a,c,k,e,d)...))
+function unpackJS(code) {
+  try {
+    const match = code.match(/eval\((function\(p,a,c,k,e,d\)[\s\S]*?)\)\s*;?\s*<\/script>/i) || 
+                  code.match(/eval\((function\(p,a,c,k,e,d\)[\s\S]*)\)/i);
+    if (match) {
+      const fn = new Function('return (' + match[1] + ')');
+      return fn();
+    }
+  } catch (e) {}
+  return null;
+}
+
+// Cloud Gateway HTML & Stream Fetcher (Bypasses ISP/DNS filter)
+async function fetchViaGateway(targetUrl, headers = {}) {
+  const gateways = [
+    `https://proxy.cors.sh/${targetUrl}`,
+    `https://corsproxy.org/?${encodeURIComponent(targetUrl)}`,
+    targetUrl
+  ];
+
+  for (const gw of gateways) {
+    try {
+      const res = await fetch(gw, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          ...headers
+        },
+        signal: AbortSignal.timeout(9000)
+      });
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.length > 100) {
+          return text;
+        }
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+// Parse Master M3U8 for individual resolution variants
+async function parseMasterM3u8Streams(masterUrl, referer = '') {
+  const formats = [];
+  try {
+    const manifest = await fetchText(masterUrl, referer ? { Referer: referer } : {});
+    if (!manifest) return formats;
+
+    if (manifest.includes('#EXT-X-STREAM-INF:')) {
+      const lines = manifest.split('\n');
+      let currentRes = null;
+      let currentBw = 0;
+      let seenHeights = new Set();
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('#EXT-X-STREAM-INF:')) {
+          const resMatch = line.match(/RESOLUTION=(\d+)x(\d+)/i);
+          const bwMatch = line.match(/BANDWIDTH=(\d+)/i);
+          if (resMatch) {
+            currentRes = parseInt(resMatch[2], 10);
+            currentBw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+          }
+        } else if (line && !line.startsWith('#')) {
+          const subUrl = new URL(line, masterUrl).toString();
+          const height = currentRes || 720;
+          if (!seenHeights.has(height)) {
+            seenHeights.add(height);
+            const is4k = height >= 2160;
+            const is2k = height >= 1440;
+            const is1080 = height >= 1080;
+            const label = is4k ? '4K Ultra HD (2160p)' :
+                          is2k ? '2K Quad HD (1440p)' :
+                          is1080 ? 'Full HD (1080p)' :
+                          height >= 720 ? 'HD (720p)' : `SD (${height}p)`;
+            const badge = is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
+
+            formats.push({
+              formatId: `hls-${height}`,
+              height: height,
+              fps: 30,
+              label: label,
+              badge: badge,
+              tbr: currentBw ? Math.round(currentBw / 1000) : null,
+              ext: 'mp4',
+              vcodec: 'h264',
+              hasAudio: true,
+              size: null,
+              sizeFormatted: currentBw ? `~${Math.round(currentBw / 8 / 1024 / 1024 * 60)} MB/min` : 'Adaptive HD Stream',
+              directUrl: subUrl,
+              isHls: true
+            });
+          }
+          currentRes = null;
+        }
+      }
+    }
+  } catch (e) {}
+  return formats;
+}
+
+// ─── Embed Resolvers for Popular Tube Hosts ───
+
+// Vidhide / Vidhidepro / Vidhidepre / Movearnpre / Filelions
+async function resolveVidhideEmbed(embedUrl) {
+  try {
+    console.log('[Resolver:Vidhide] Probing embed:', embedUrl);
+    const html = await fetchViaGateway(embedUrl);
+    if (!html) return null;
+
+    let unpacked = '';
+    const scripts = html.match(/<script[\s\S]*?<\/script>/gi) || [];
+    for (const s of scripts) {
+      if (s.includes('eval(function(p,a,c,k,e,d)')) {
+        const res = unpackJS(s);
+        if (res) unpacked += res + '\n';
+      }
+    }
+
+    const combined = html + '\n' + unpacked;
+    const linksMatch = combined.match(/var\s+links\s*=\s*({[^}]+})/i) || combined.match(/links\s*=\s*({[^}]+})/i);
+    let masterM3u8 = null;
+
+    if (linksMatch) {
+      try {
+        const parsed = JSON.parse(linksMatch[1]);
+        masterM3u8 = parsed.hls2 || parsed.hls3 || parsed.hls4 || parsed.hls;
+      } catch (e) {
+        const m = linksMatch[1].match(/['"](https?:\/\/[^'"]+\.m3u8[^'"]*)['"]/i);
+        if (m) masterM3u8 = m[1];
+      }
+    }
+
+    if (!masterM3u8) {
+      const directM3u8 = combined.match(/['"](https?:\/\/[^'"\s<>]+\.m3u8[^'"\s<>]*)['"]/i);
+      if (directM3u8) masterM3u8 = directM3u8[1];
+    }
+
+    if (masterM3u8) {
+      console.log('[Resolver:Vidhide] Found master m3u8:', masterM3u8);
+      return {
+        provider: 'VidHide',
+        streamUrl: masterM3u8,
+        isHls: true
+      };
+    }
+  } catch (err) {
+    console.warn('[Resolver:Vidhide Error]:', err.message);
+  }
+  return null;
+}
+
+// Streamtape
+async function resolveStreamtapeEmbed(embedUrl) {
+  try {
+    console.log('[Resolver:Streamtape] Probing embed:', embedUrl);
+    let standardEmbed = embedUrl;
+    if (embedUrl.includes('/v/')) {
+      standardEmbed = embedUrl.replace('/v/', '/e/');
+    }
+    const html = await fetchViaGateway(standardEmbed);
+    if (!html || html.includes('Video not found') || html.includes('deleted by the creator')) {
+      return null;
+    }
+
+    const match = html.match(/document\.getElementById\(['"](robotlink|botlink|videolink)['"]\)\.innerHTML\s*=\s*['"]([^'"]+)['"]\s*\+\s*['"]([^'"]+)['"]/i);
+    if (match) {
+      let streamUrl = match[2] + match[3];
+      if (streamUrl.startsWith('//')) streamUrl = 'https:' + streamUrl;
+      console.log('[Resolver:Streamtape] Found direct stream:', streamUrl);
+      return {
+        provider: 'Streamtape',
+        streamUrl,
+        isHls: false
+      };
+    }
+  } catch (err) {
+    console.warn('[Resolver:Streamtape Error]:', err.message);
+  }
+  return null;
+}
+
+// Streamwish / Strwish / Flaswish / Streamruby
+async function resolveStreamwishEmbed(embedUrl) {
+  try {
+    console.log('[Resolver:Streamwish] Probing embed:', embedUrl);
+    let standardEmbed = embedUrl;
+    if (embedUrl.includes('/v/')) standardEmbed = embedUrl.replace('/v/', '/e/');
+    const html = await fetchViaGateway(standardEmbed);
+    if (!html) return null;
+
+    let unpacked = '';
+    const scripts = html.match(/<script[\s\S]*?<\/script>/gi) || [];
+    for (const s of scripts) {
+      if (s.includes('eval(function(p,a,c,k,e,d)')) {
+        const res = unpackJS(s);
+        if (res) unpacked += res + '\n';
+      }
+    }
+
+    const combined = html + '\n' + unpacked;
+    const match = combined.match(/sources\s*:\s*\[\s*\{\s*file\s*:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/i) ||
+                  combined.match(/['"](https?:\/\/[^'"\s<>]+\.m3u8[^'"\s<>]*)['"]/i);
+    if (match) {
+      return {
+        provider: 'Streamwish',
+        streamUrl: match[1],
+        isHls: true
+      };
+    }
+  } catch (err) {
+    console.warn('[Resolver:Streamwish Error]:', err.message);
+  }
+  return null;
+}
+
+// Doodstream / Dood
+async function resolveDoodstreamEmbed(embedUrl) {
+  try {
+    console.log('[Resolver:Doodstream] Probing embed:', embedUrl);
+    let standardEmbed = embedUrl;
+    if (embedUrl.includes('/d/')) standardEmbed = embedUrl.replace('/d/', '/e/');
+    const html = await fetchViaGateway(standardEmbed);
+    if (!html) return null;
+
+    const passMatch = html.match(/\/pass_md5\/[a-zA-Z0-9_\-\/]+/i);
+    if (passMatch) {
+      const passUrl = new URL(passMatch[0], standardEmbed).toString();
+      const token = await fetchViaGateway(passUrl, { Referer: standardEmbed });
+      if (token && token.startsWith('http')) {
+        const directUrl = token.trim() + '~' + Array.from({length: 10}, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('') + '?token=' + passMatch[0].split('/').pop();
+        return {
+          provider: 'Doodstream',
+          streamUrl: directUrl,
+          isHls: false
+        };
+      }
+    }
+  } catch (err) {}
+  return null;
+}
+
+// Generic Embed Resolver (HTML5 / JWPlayer / VideoJS)
+async function resolveGenericEmbed(embedUrl) {
+  try {
+    const html = await fetchViaGateway(embedUrl);
+    if (!html) return null;
+
+    let unpacked = '';
+    const scripts = html.match(/<script[\s\S]*?<\/script>/gi) || [];
+    for (const s of scripts) {
+      if (s.includes('eval(function(p,a,c,k,e,d)')) {
+        const res = unpackJS(s);
+        if (res) unpacked += res + '\n';
+      }
+    }
+    const combined = html + '\n' + unpacked;
+
+    const m3u8Match = combined.match(/['"](https?:\/\/[^'"\s<>]+\.m3u8[^'"\s<>]*)['"]/i);
+    if (m3u8Match) {
+      return {
+        provider: 'HLS Media',
+        streamUrl: m3u8Match[1],
+        isHls: true
+      };
+    }
+
+    const mp4Match = combined.match(/['"](https?:\/\/[^'"\s<>]+\.(?:mp4|webm)[^'"\s<>]*)['"]/i);
+    if (mp4Match && !mp4Match[1].includes('/v/') && !mp4Match[1].includes('preview') && !mp4Match[1].includes('thumb')) {
+      return {
+        provider: 'Direct Media',
+        streamUrl: mp4Match[1],
+        isHls: false
+      };
+    }
+  } catch (e) {}
+  return null;
+}
+
+// ─── Cloud Gateway & Direct Stream Fallback Extractor (Bypasses ISP/DNS Blocks without VPN) ───
 async function extractCloudFallback(targetUrl) {
-  const isDirectFile = /\.(?:mp4|webm|m3u8|mkv|mov|mp3|m4a)(?:[/?#]|$)/i.test(targetUrl) || targetUrl.includes('/get_file/');
-  if (isDirectFile) {
+  const isActualDirectMedia = /\.(?:mp4|webm|m3u8|mkv|mov|mp3|m4a)(?:[/?#]|$)/i.test(targetUrl) && 
+                              !targetUrl.includes('/v/') && 
+                              !targetUrl.includes('/watch') &&
+                              !targetUrl.includes('streamtape') &&
+                              !targetUrl.includes('youtube.com');
+
+  if (isActualDirectMedia) {
     let height = 1080;
     if (/2160|4[kK]/i.test(targetUrl)) height = 2160;
     else if (/1440|2[kK]/i.test(targetUrl)) height = 1440;
@@ -1147,7 +1588,8 @@ async function extractCloudFallback(targetUrl) {
           hasAudio: true,
           size: null,
           sizeFormatted: 'Original Quality',
-          directUrl: targetUrl
+          directUrl: targetUrl,
+          isHls: targetUrl.includes('.m3u8')
         }
       ],
       audioFormats: [
@@ -1168,93 +1610,161 @@ async function extractCloudFallback(targetUrl) {
   }
 
   // Scrape page via cloud gateways
-  const gateways = [
-    `https://proxy.cors.sh/${targetUrl}`,
-    `https://corsproxy.org/?${encodeURIComponent(targetUrl)}`,
-    `https://html-preview.github.io/?url=${encodeURIComponent(targetUrl)}`
-  ];
-
-  let html = null;
-  for (const gw of gateways) {
-    try {
-      const res = await fetch(gw, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-        },
-        signal: AbortSignal.timeout(8000)
-      });
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.length > 500) {
-          html = text;
-          break;
-        }
-      }
-    } catch (e) {}
-  }
-
+  const html = await fetchViaGateway(targetUrl);
   if (!html) throw new Error('Cloud fallback could not retrieve webpage.');
 
   // Extract title
   const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
-  let title = titleMatch ? titleMatch[1].replace(/[-|_|\s]*Free.*$/i, '').trim() : 'Video';
+  let title = titleMatch ? titleMatch[1].replace(/[-|_|\s]*Free.*$/i, '').replace(/[-|_|\s]*HD Porn.*$/i, '').trim() : 'Video';
 
   // Extract thumbnail
   const thumbMatch = html.match(/poster=['"]([^'"]+)['"]/i) || 
                      html.match(/preview_url\s*:\s*['"]([^'"]+)['"]/i) ||
                      html.match(/<meta\s+property=['"]og:image['"]\s+content=['"]([^'"]+)['"]/i) ||
-                     html.match(/https?:\/\/img\.[^'"\s<>]+\.(?:jpg|png|webp)/i);
+                     html.match(/https?:\/\/img\.[^'"\s<>]+\.(?:jpg|png|webp)/i) ||
+                     html.match(/https?:\/\/[^'"\s<>]+\/uploads\/[^'"\s<>]+\.(?:jpg|png|webp)/i);
   let rawThumb = thumbMatch ? (thumbMatch[1] || thumbMatch[0]) : '';
   const thumbnail = rawThumb ? `/api/proxy-image?url=${encodeURIComponent(rawThumb)}` : '';
 
-  // Extract video streams
+  // Extract duration if available
+  let duration = 0;
+  const durMatch = html.match(/duration\s*:\s*['"]?(\d+)['"]?/i) || html.match(/length\s*=\s*['"]?(\d+)['"]?/i);
+  if (durMatch) duration = parseInt(durMatch[1], 10);
+
+  // 1. Gather all embedded iframe and host URLs
+  const iframes = [...html.matchAll(/<iframe[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
+  const candidateEmbeds = new Set(iframes);
+
+  const generalLinks = html.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+  for (const l of generalLinks) {
+    if (/streamtape|vidhide|movearnpre|filelions|dood|streamwish|strwish|flaswish|mixdrop|voe\.sx|streamruby/i.test(l)) {
+      candidateEmbeds.add(l);
+    }
+  }
+
+  console.log(`[Cloud Fallback] Found ${candidateEmbeds.size} embed candidates to probe...`);
+
   const videoFormats = [];
-  const seenUrls = new Set();
+  const seenDirectUrls = new Set();
   const seenHeights = new Set();
 
-  const streamMatches = html.matchAll(/['"](https?:\/\/[^'"\s<>]*(?:\/get_file\/|\.mp4|\.m3u8)[^'"\s<>]*)['"]/gi);
-  
-  for (const match of streamMatches) {
-    const streamUrl = match[1];
-    if (seenUrls.has(streamUrl) || streamUrl.includes('preview') || streamUrl.includes('thumb') || streamUrl.includes('screenshots')) {
-      continue;
+  for (const embedUrl of candidateEmbeds) {
+    let resolved = null;
+    if (/vidhide|movearnpre|filelions|vidembed/i.test(embedUrl)) {
+      resolved = await resolveVidhideEmbed(embedUrl);
+    } else if (/streamtape/i.test(embedUrl)) {
+      resolved = await resolveStreamtapeEmbed(embedUrl);
+    } else if (/streamwish|strwish|flaswish|streamruby/i.test(embedUrl)) {
+      resolved = await resolveStreamwishEmbed(embedUrl);
+    } else if (/dood/i.test(embedUrl)) {
+      resolved = await resolveDoodstreamEmbed(embedUrl);
+    } else {
+      resolved = await resolveGenericEmbed(embedUrl);
     }
-    seenUrls.add(streamUrl);
 
-    let height = 720;
-    if (/2160|4[kK]/i.test(streamUrl)) height = 2160;
-    else if (/1440|2[kK]/i.test(streamUrl)) height = 1440;
-    else if (/1080/i.test(streamUrl)) height = 1080;
-    else if (/720/i.test(streamUrl)) height = 720;
-    else if (/480/i.test(streamUrl)) height = 480;
-    else if (/360/i.test(streamUrl)) height = 360;
+    if (resolved && resolved.streamUrl && !seenDirectUrls.has(resolved.streamUrl)) {
+      seenDirectUrls.add(resolved.streamUrl);
+      console.log(`[Cloud Fallback] Successfully resolved provider [${resolved.provider}]:`, resolved.streamUrl);
 
-    if (!seenHeights.has(height)) {
-      seenHeights.add(height);
-      const is4k = height >= 2160;
-      const is2k = height >= 1440;
-      const is1080 = height >= 1080;
-      const badge = is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
-      const label = is4k ? '4K Ultra HD (2160p)' :
-                    is2k ? '2K Quad HD (1440p)' :
-                    is1080 ? 'Full HD (1080p)' :
-                    height >= 720 ? 'HD (720p)' :
-                    `SD (${height}p)`;
+      // If it's an HLS master playlist, parse sub-variants
+      if (resolved.isHls) {
+        const subFormats = await parseMasterM3u8Streams(resolved.streamUrl, embedUrl);
+        for (const sf of subFormats) {
+          if (!seenHeights.has(sf.height)) {
+            seenHeights.add(sf.height);
+            videoFormats.push(sf);
+          }
+        }
+      }
 
-      videoFormats.push({
-        formatId: `cloud-${height}`,
-        height: height,
-        fps: null,
-        label: label,
-        badge: badge,
-        tbr: null,
-        ext: 'mp4',
-        vcodec: 'h264',
-        hasAudio: true,
-        size: null,
-        sizeFormatted: 'Best Quality',
-        directUrl: streamUrl
-      });
+      // If no sub-variants were parsed (or direct single stream), add standard high quality format
+      if (videoFormats.length === 0 || !resolved.isHls) {
+        let height = 720;
+        if (/2160|4[kK]/i.test(resolved.streamUrl)) height = 2160;
+        else if (/1440|2[kK]/i.test(resolved.streamUrl)) height = 1440;
+        else if (/1080/i.test(resolved.streamUrl)) height = 1080;
+
+        if (!seenHeights.has(height)) {
+          seenHeights.add(height);
+          const is4k = height >= 2160;
+          const is2k = height >= 1440;
+          const is1080 = height >= 1080;
+          const badge = is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
+          const label = is4k ? '4K Ultra HD (2160p)' :
+                        is2k ? '2K Quad HD (1440p)' :
+                        is1080 ? 'Full HD (1080p)' :
+                        height >= 720 ? 'HD (720p)' : `SD (${height}p)`;
+
+          videoFormats.push({
+            formatId: `cloud-${height}`,
+            height: height,
+            fps: 30,
+            label: label,
+            badge: badge,
+            tbr: null,
+            ext: 'mp4',
+            vcodec: 'h264',
+            hasAudio: true,
+            size: null,
+            sizeFormatted: 'Best HD Quality',
+            directUrl: resolved.streamUrl,
+            isHls: resolved.isHls
+          });
+        }
+      }
+    }
+  }
+
+  // 2. Direct page media fallback (video tags & inline m3u8) if embeds gave nothing
+  if (videoFormats.length === 0) {
+    const directMatches = html.matchAll(/['"](https?:\/\/[^'"\s<>]*(?:\/get_file\/|\.mp4|\.m3u8)[^'"\s<>]*)['"]/gi);
+    for (const match of directMatches) {
+      const streamUrl = match[1];
+      if (
+        seenDirectUrls.has(streamUrl) || 
+        streamUrl.includes('preview') || 
+        streamUrl.includes('thumb') || 
+        streamUrl.includes('screenshots') ||
+        streamUrl.includes('/v/') ||
+        streamUrl.includes('streamtape')
+      ) {
+        continue;
+      }
+      seenDirectUrls.add(streamUrl);
+
+      let height = 720;
+      if (/2160|4[kK]/i.test(streamUrl)) height = 2160;
+      else if (/1440|2[kK]/i.test(streamUrl)) height = 1440;
+      else if (/1080/i.test(streamUrl)) height = 1080;
+      else if (/480/i.test(streamUrl)) height = 480;
+
+      if (!seenHeights.has(height)) {
+        seenHeights.add(height);
+        const is4k = height >= 2160;
+        const is2k = height >= 1440;
+        const is1080 = height >= 1080;
+        const badge = is4k ? '4K' : is2k ? '2K' : is1080 ? '1080P' : height >= 720 ? 'HD' : 'SD';
+        const label = is4k ? '4K Ultra HD (2160p)' :
+                      is2k ? '2K Quad HD (1440p)' :
+                      is1080 ? 'Full HD (1080p)' :
+                      height >= 720 ? 'HD (720p)' : `SD (${height}p)`;
+
+        videoFormats.push({
+          formatId: `cloud-${height}`,
+          height: height,
+          fps: null,
+          label: label,
+          badge: badge,
+          tbr: null,
+          ext: 'mp4',
+          vcodec: 'h264',
+          hasAudio: true,
+          size: null,
+          sizeFormatted: 'Original Quality',
+          directUrl: streamUrl,
+          isHls: streamUrl.includes('.m3u8')
+        });
+      }
     }
   }
 
@@ -1263,9 +1773,9 @@ async function extractCloudFallback(targetUrl) {
   return {
     title,
     thumbnail,
-    duration: 0,
-    durationFormatted: '--:--',
-    uploader: 'Web Video',
+    duration,
+    durationFormatted: formatDuration(duration),
+    uploader: 'Web Video Stream',
     uploaderUrl: '',
     viewCount: null,
     site: 'Cloud Extractor',
@@ -1277,8 +1787,8 @@ async function extractCloudFallback(targetUrl) {
         ext: 'mp3',
         quality: '320 kbps (High Quality)',
         abr: 320,
-        size: null,
-        sizeFormatted: 'Standard Size',
+        size: duration > 0 ? Math.round((320000 / 8) * duration) : null,
+        sizeFormatted: formatBytes(duration > 0 ? Math.round((320000 / 8) * duration) : null),
         container: 'mp3',
         codec: 'mp3',
         directUrl: videoFormats[0]?.directUrl
@@ -1289,7 +1799,7 @@ async function extractCloudFallback(targetUrl) {
 }
 
 // API: Proxy Image (Bypasses ISP image CDN blocking)
-app.get('/api/proxy-image', async (req, res) => {
+app.get('/api/proxy-image', proxyRateLimiter, async (req, res) => {
   const { url } = req.query;
   if (!url || typeof url !== 'string') {
     return res.status(400).send('Invalid URL');
@@ -1341,7 +1851,7 @@ app.get('/api/proxy-image', async (req, res) => {
 });
 
 // API: Status
-app.get('/api/status', (req, res) => {
+app.get('/api/status', pollingRateLimiter, (req, res) => {
   res.json({
     ok: true,
     ytdlpAvailable: isBinaryAvailable(getYtdlpPath()),
@@ -1352,7 +1862,7 @@ app.get('/api/status', (req, res) => {
 });
 
 // API: Analyze Video URL (Calculates exact sizes for all formats)
-app.post('/api/analyze', async (req, res) => {
+app.post('/api/analyze', analyzeRateLimiter, async (req, res) => {
   const { url } = req.body;
   if (!url || typeof url !== 'string' || isPrivateOrLocalUrl(url.trim())) {
     return res.status(400).json({ ok: false, error: 'Please provide a valid public video URL.' });
@@ -1708,7 +2218,7 @@ app.post('/api/analyze', async (req, res) => {
 // ============================================================================
 // POST /api/download (Starts turbo background worker with live SSE progress)
 // ============================================================================
-app.post('/api/download', async (req, res) => {
+app.post('/api/download', downloadRateLimiter, async (req, res) => {
   const { url, title, formatId, height, isAudio, directUrl, ext } = req.body;
   if (!url && !directUrl) {
     return res.status(400).json({ ok: false, error: 'Video URL is required.' });
@@ -1718,7 +2228,20 @@ app.post('/api/download', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Invalid or restricted video URL.' });
   }
 
+  const clientIp = getClientIp(req);
+  const currentConcurrent = activeDownloadsPerIp.get(clientIp) || 0;
+  if (currentConcurrent >= MAX_CONCURRENT_DOWNLOADS_PER_IP) {
+    return res.status(429).json({
+      ok: false,
+      error: `Concurrency limit reached: You currently have ${currentConcurrent} active download task(s) in progress. Please wait for them to finish or cancel one before starting a new download.`,
+      code: 'CONCURRENCY_LIMIT_EXCEEDED',
+      limit: MAX_CONCURRENT_DOWNLOADS_PER_IP
+    });
+  }
+
   const downloadId = Math.random().toString(36).substring(2, 12) + Date.now().toString(36);
+  claimIpDownloadSlot(clientIp, downloadId);
+
   const isAudioFlag = isAudio === true || isAudio === 'true';
   const cleanExt = (isAudioFlag ? 'mp3' : (ext || 'mp4')).toString().replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || (isAudioFlag ? 'mp3' : 'mp4');
   const safeTitle = sanitizeFilename(title || 'video');
@@ -1769,6 +2292,7 @@ app.post('/api/download', async (req, res) => {
       }, abortController);
 
       activeProcesses.delete(downloadId);
+      releaseIpDownloadSlot(downloadId);
       notifyProgress({
         status: 'completed',
         percent: 100,
@@ -1778,6 +2302,7 @@ app.post('/api/download', async (req, res) => {
       return;
     } catch (hlsErr) {
       activeProcesses.delete(downloadId);
+      releaseIpDownloadSlot(downloadId);
       if (hlsErr.message === 'CANCELLED') {
         notifyProgress({ status: 'cancelled', speed: 'Cancelled', eta: '--' });
       } else {
@@ -1812,6 +2337,7 @@ app.post('/api/download', async (req, res) => {
       }, abortController);
 
       activeProcesses.delete(downloadId);
+      releaseIpDownloadSlot(downloadId);
       notifyProgress({
         status: 'completed',
         percent: 100,
@@ -1822,22 +2348,27 @@ app.post('/api/download', async (req, res) => {
     } catch (parallelErr) {
       activeProcesses.delete(downloadId);
       if (parallelErr.message === 'CANCELLED') {
+        releaseIpDownloadSlot(downloadId);
         notifyProgress({ status: 'cancelled', speed: 'Cancelled', eta: '--' });
         return;
       }
       console.warn('[Direct Parallel HTTP Downloader skipped/fallback]:', parallelErr.message);
-      // Fall through to yt-dlp seamlessly
+      // Fall through to yt-dlp seamlessly (IP download slot remains claimed)
     }
   }
 
-  // 3. Universal yt-dlp Multi-Threaded Downloader (-N 16 & chunk buffers)
+  // 3. Universal yt-dlp Multi-Threaded Downloader (-N 16 & chunk buffers & anti-throttle)
   const ytdlpArgs = [
     '--no-playlist',
     '--no-warnings',
     '--newline',
     '-N', '16',
     '--concurrent-fragments', '16',
+    '--http-chunk-size', '10M',
+    '--throttled-rate', '100K',
     '--buffer-size', '64M',
+    '--retries', '10',
+    '--fragment-retries', '10',
     '--ffmpeg-location', getFfmpegPath(),
     '--extractor-args', 'youtube:player-client=default,tv_simply',
     '--js-runtimes', 'node',
@@ -1903,6 +2434,7 @@ app.post('/api/download', async (req, res) => {
 
   proc.on('close', (code) => {
     activeProcesses.delete(downloadId);
+    releaseIpDownloadSlot(downloadId);
     if (code === 0 && fs.existsSync(localSavedPath)) {
       notifyProgress({
         status: 'completed',
@@ -1917,15 +2449,20 @@ app.post('/api/download', async (req, res) => {
         if (
           downloadStderr.includes('Failed to resolve') ||
           downloadStderr.includes('getaddrinfo failed') ||
-          downloadStderr.includes('DNS operation refused')
+          downloadStderr.includes('DNS operation refused') ||
+          downloadStderr.includes('11001')
         ) {
           errMsg = 'Download failed: Domain blocked by ISP / DNS filter.';
         } else if (
           downloadStderr.includes('Connection was reset') ||
           downloadStderr.includes('ECONNRESET') ||
-          downloadStderr.includes('Recv failure')
+          downloadStderr.includes('Recv failure') ||
+          downloadStderr.includes('10054') ||
+          downloadStderr.includes('forcibly closed') ||
+          downloadStderr.includes('Connection aborted') ||
+          downloadStderr.includes('RemoteDisconnected')
         ) {
-          errMsg = 'Download failed: Connection reset / blocked by ISP. Try using a VPN.';
+          errMsg = 'Blocked by ISP Firewall (Connection Reset 10054): This video stream is hosted directly on a blocked domain. Please enable a VPN (e.g. ProtonVPN/WARP) to download from this specific site.';
         } else if (downloadStderr.includes('HTTP Error 403') || downloadStderr.includes('Forbidden')) {
           errMsg = 'Download failed: Access forbidden (HTTP 403).';
         } else if (downloadStderr.includes('HTTP Error 404') || downloadStderr.includes('Not Found')) {
@@ -1944,6 +2481,7 @@ app.post('/api/download/cancel/:id', (req, res) => {
   const downloadState = activeDownloads.get(id);
 
   console.log(`[Cancel Download] Cancelling download ID: ${id}`);
+  releaseIpDownloadSlot(id);
 
   if (item) {
     if (item.abortController) {
@@ -1992,7 +2530,7 @@ app.post('/api/download/cancel/:id', (req, res) => {
 });
 
 // SSE Endpoint for Live Real-Time Progress
-app.get('/api/progress/:id', (req, res) => {
+app.get('/api/progress/:id', pollingRateLimiter, (req, res) => {
   const { id } = req.params;
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -2012,7 +2550,7 @@ app.get('/api/progress/:id', (req, res) => {
 });
 
 // API: Deliver Downloaded File to Browser (RFC 5987 compliant header)
-app.get('/api/file/:id', (req, res) => {
+app.get('/api/file/:id', fileDeliveryLimiter, (req, res) => {
   const { id } = req.params;
   const item = activeDownloads.get(id);
   if (!item) {
@@ -2044,7 +2582,7 @@ app.get('/api/file/:id', (req, res) => {
 });
 
 // API: Download History
-app.get('/api/history', (req, res) => {
+app.get('/api/history', pollingRateLimiter, (req, res) => {
   try {
     const files = fs.readdirSync(DOWNLOADS_DIR);
     const history = [];
@@ -2073,7 +2611,7 @@ app.get('/api/history', (req, res) => {
   }
 });
 
-app.get('/api/download-file/:filename', (req, res) => {
+app.get('/api/download-file/:filename', fileDeliveryLimiter, (req, res) => {
   try {
     const { resolved, safeName } = safeResolveDownloadPath(req.params.filename);
     if (!fs.existsSync(resolved)) {

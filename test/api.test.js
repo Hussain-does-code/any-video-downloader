@@ -10,7 +10,7 @@ const app = require('../server');
 let BASE_URL = '';
 let serverInstance = null;
 
-function makeRequest(path, method = 'GET', body = null) {
+function makeRequest(path, method = 'GET', body = null, customHeaders = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, BASE_URL);
     const options = {
@@ -19,7 +19,8 @@ function makeRequest(path, method = 'GET', body = null) {
       path: url.pathname + url.search,
       method: method,
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...customHeaders
       }
     };
 
@@ -161,6 +162,74 @@ async function runTests() {
     const res = await makeRequest('/api/open-folder', 'POST');
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.data.ok, true);
+  });
+
+  // 14. Rate Limiting Headers Verification
+  await test('Rate limit headers (RateLimit-* or X-RateLimit-*) are present on API responses', async () => {
+    const res = await makeRequest('/api/status', 'GET', null, { 'X-Forwarded-For': '198.51.100.10' });
+    assert.strictEqual(res.status, 200);
+    const hasLimitHeader = res.headers['ratelimit-limit'] || res.headers['x-ratelimit-limit'];
+    const hasRemainingHeader = res.headers['ratelimit-remaining'] || res.headers['x-ratelimit-remaining'];
+    assert(hasLimitHeader, 'RateLimit-Limit or X-RateLimit-Limit must be set');
+    assert(hasRemainingHeader, 'RateLimit-Remaining or X-RateLimit-Remaining must be set');
+  });
+
+  // 15. IP Concurrency Guard on /api/download
+  await test('POST /api/download enforces concurrency limit (max 2) per IP', async () => {
+    const testIp = '198.51.100.25';
+    // Start download 1
+    const res1 = await makeRequest('/api/download', 'POST', {
+      url: 'https://example.com/video1.mp4',
+      title: 'Concurrency Test 1'
+    }, { 'X-Forwarded-For': testIp });
+    assert.strictEqual(res1.status, 200);
+    assert.strictEqual(res1.data.ok, true);
+
+    // Start download 2
+    const res2 = await makeRequest('/api/download', 'POST', {
+      url: 'https://example.com/video2.mp4',
+      title: 'Concurrency Test 2'
+    }, { 'X-Forwarded-For': testIp });
+    assert.strictEqual(res2.status, 200);
+    assert.strictEqual(res2.data.ok, true);
+
+    // Attempt download 3 (should be rejected with 429 Concurrency limit)
+    const res3 = await makeRequest('/api/download', 'POST', {
+      url: 'https://example.com/video3.mp4',
+      title: 'Concurrency Test 3'
+    }, { 'X-Forwarded-For': testIp });
+    assert.strictEqual(res3.status, 429);
+    assert.strictEqual(res3.data.ok, false);
+    assert.strictEqual(res3.data.code, 'CONCURRENCY_LIMIT_EXCEEDED');
+
+    // Clean up active test downloads
+    if (res1.data.downloadId) {
+      await makeRequest(`/api/download/cancel/${res1.data.downloadId}`, 'POST', null, { 'X-Forwarded-For': testIp });
+    }
+    if (res2.data.downloadId) {
+      await makeRequest(`/api/download/cancel/${res2.data.downloadId}`, 'POST', null, { 'X-Forwarded-For': testIp });
+    }
+  });
+
+  // 16. Strict Rate Limiting on Burst /api/analyze Requests
+  await test('POST /api/analyze returns 429 and Retry-After header on burst requests', async () => {
+    const burstIp = '198.51.100.88';
+    let rateLimitedResponse = null;
+
+    // Send 22 rapid requests to exceed analyze rate limit (20 max)
+    for (let i = 0; i < 22; i++) {
+      const res = await makeRequest('/api/analyze', 'POST', { url: '' }, { 'X-Forwarded-For': burstIp });
+      if (res.status === 429) {
+        rateLimitedResponse = res;
+        break;
+      }
+    }
+
+    assert(rateLimitedResponse, 'Expected 429 Rate Limit Exceeded response on burst analyze requests');
+    assert.strictEqual(rateLimitedResponse.status, 429);
+    assert.strictEqual(rateLimitedResponse.data.ok, false);
+    assert(rateLimitedResponse.data.code === 'ANALYZE_RATE_LIMIT_EXCEEDED' || rateLimitedResponse.data.code === 'GLOBAL_RATE_LIMIT_EXCEEDED');
+    assert(rateLimitedResponse.headers['retry-after'], 'Retry-After header must be present on 429');
   });
 
   console.log(`\n========================================`);

@@ -63,10 +63,26 @@ docker run -d -p 80:3000 --restart always --name video-downloader video-download
 
 ---
 
-## 🛡️ Built-in K37 Security & Cloud Features
+## 🛡️ Built-in K37 Security & Rate Limiting Controls
 
-- **SSRF Blocker**: Rejects unauthorized access to internal network or cloud metadata.
-- **Path Traversal Protection**: Ensures file operations remain strictly sandboxed.
-- **Security Headers**: HSTS, CSP, X-Frame-Options, X-Content-Type-Options active.
+- **Multi-Tier Strict Rate Limiting**: Dedicated rate limits for analysis, video downloads, thumbnail proxies, file streaming, and status polling with RFC/IETF `RateLimit-*` and `Retry-After` headers.
+- **Per-IP Concurrency Guard**: Caps simultaneous heavy downloads per IP (default: 2) to protect cloud CPU and memory from crashing.
+- **SSRF Blocker**: Rejects unauthorized access to internal networks, localhost, or cloud instance metadata.
+- **Path Traversal Sandboxing**: Ensures file operations remain strictly inside the downloads directory.
+- **Security Headers**: Production-grade CSP, HSTS, X-Frame-Options, X-Content-Type-Options active.
 - **Auto-Pruning GC**: Automatically cleans up completed video files older than 45 minutes to prevent out-of-disk crashes on cloud hosts.
-- **High-Speed Engine**: 16-connection parallel chunk streaming with live SSE progress.
+
+### ⚙️ Optional Rate Limiting Environment Variables
+
+You can configure any of these in your cloud provider's dashboard (Render, Railway, Fly.io, etc.):
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `RATE_LIMIT_GLOBAL_MAX` | `200` | Max total API requests per minute per IP |
+| `RATE_LIMIT_ANALYZE_MAX` | `20` | Max video URL analysis probes per minute per IP |
+| `RATE_LIMIT_DOWNLOAD_MAX` | `25` | Max download pipeline requests per 15 min per IP |
+| `RATE_LIMIT_PROXY_MAX` | `45` | Max thumbnail image proxy requests per minute per IP |
+| `RATE_LIMIT_FILE_MAX` | `30` | Max file stream delivery downloads per minute per IP |
+| `RATE_LIMIT_POLL_MAX` | `120` | Max SSE progress & status polling requests per min |
+| `RATE_LIMIT_CONCURRENT_MAX`| `2` | Max concurrent active downloading processes per IP |
+
