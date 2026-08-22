@@ -3,117 +3,282 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Apex Video Downloader — Intelligent 4K Stream Extraction</title>
-  <meta name="description" content="Orchestrate and download your 4K video data streams with intelligent speed, zero telemetry, and maximum fidelity across 1,800+ platforms.">
+  <title>Stream Studio — One-Click Media Extraction</title>
+  <meta name="description" content="Dive into uncompressed media streams, where multi-threaded socket acceleration meets studio fidelity. Extract 4K video and lossless master audio with one click.">
   
-  <!-- Google Fonts: Plus Jakarta Sans & Inter -->
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+
+  <!-- Google Fonts: Inter & Plus Jakarta Sans & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
   
   <!-- FontAwesome 6 Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   
-  <!-- Design System -->
+  <!-- Luxury Dark Design System -->
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-  <!-- Main Application Container -->
-  <div class="app-container">
+  <!-- ── Pitch Black Canvas with Cinematic 3D Floating Blurred Paper Sheets ── -->
+  <div class="ambient-paper-stage" aria-hidden="true">
     
-    <!-- ── Top Header Navigation ── -->
-    <header class="app-header">
-      <a href="/" class="logo">
-        <div class="logo-symbol">
-          <i class="fa-solid fa-bolt"></i>
-        </div>
-        <div class="logo-text-group">
-          <span class="logo-brand">Apex<span style="color:#2563EB;">Flow</span></span>
-          <span class="logo-status-tag">
-            <span class="status-live-beacon"></span>
-            <span>Engine Ready • 4K Active</span>
-          </span>
-        </div>
-      </a>
-
-      <div class="header-nav-actions">
-        <button id="openFolderBtn" class="pill-btn" title="Open Downloads Directory on Disk">
-          <i class="fa-regular fa-folder-open"></i>
-          <span class="btn-label">Storage</span>
-        </button>
-        <button id="toggleHistoryBtn" class="pill-btn" title="View Download History">
-          <i class="fa-solid fa-clock-rotate-left"></i>
-          <span class="btn-label">History</span>
-          <span class="counter-badge" id="historyCount">0</span>
-        </button>
+    <!-- Top-Right Floating Paper Cluster -->
+    <div class="paper-cluster cluster-top-right">
+      <div class="floating-paper-sheet sheet-1">
+        <svg viewBox="0 0 320 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 60 Q 140 10, 280 40 Q 300 120, 240 190 Q 100 160, 40 180 Z" fill="url(#paperGrad1)" />
+          <path d="M50 80 Q 150 40, 260 60 Q 240 140, 200 170 Q 110 140, 60 150 Z" fill="url(#paperGrad2)" opacity="0.6" />
+          <defs>
+            <linearGradient id="paperGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9" />
+              <stop offset="35%" stop-color="#CBD5E1" stop-opacity="0.7" />
+              <stop offset="70%" stop-color="#64748B" stop-opacity="0.4" />
+              <stop offset="100%" stop-color="#0F172A" stop-opacity="0.1" />
+            </linearGradient>
+            <linearGradient id="paperGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.8" />
+              <stop offset="50%" stop-color="#94A3B8" stop-opacity="0.5" />
+              <stop offset="100%" stop-color="#1E293B" stop-opacity="0.2" />
+            </linearGradient>
+          </defs>
+        </svg>
       </div>
-    </header>
 
-    <!-- ── Hero Stage with Glass Ribbons Backdrop ── -->
-    <section class="hero-section">
-      <div class="hero-ribbon-stage">
+      <div class="floating-paper-sheet sheet-2">
+        <svg viewBox="0 0 280 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M30 40 C 120 10, 220 30, 260 80 C 240 150, 180 180, 80 170 C 20 160, 10 100, 30 40 Z" fill="url(#paperGrad3)" />
+          <defs>
+            <linearGradient id="paperGrad3" x1="0%" y1="0%" x2="100%" y2="80%">
+              <stop offset="0%" stop-color="#F8FAFC" stop-opacity="0.85" />
+              <stop offset="40%" stop-color="#94A3B8" stop-opacity="0.6" />
+              <stop offset="100%" stop-color="#0F172A" stop-opacity="0.05" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <div class="floating-paper-sheet sheet-3">
+        <svg viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 30 Q 90 5, 180 40 Q 170 120, 110 145 Q 30 130, 10 30 Z" fill="url(#paperGrad4)" />
+          <defs>
+            <linearGradient id="paperGrad4" x1="20%" y1="0%" x2="80%" y2="100%">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.75" />
+              <stop offset="60%" stop-color="#64748B" stop-opacity="0.35" />
+              <stop offset="100%" stop-color="#020617" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Bottom-Left Floating Paper Cluster -->
+    <div class="paper-cluster cluster-bottom-left">
+      <div class="floating-paper-sheet sheet-4">
+        <svg viewBox="0 0 340 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M40 50 Q 160 20, 300 70 Q 280 180, 190 220 Q 80 190, 40 50 Z" fill="url(#paperGrad5)" />
+          <path d="M70 70 Q 180 40, 270 85 Q 240 160, 170 190 Q 90 165, 70 70 Z" fill="url(#paperGrad6)" opacity="0.5" />
+          <defs>
+            <linearGradient id="paperGrad5" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9" />
+              <stop offset="45%" stop-color="#CBD5E1" stop-opacity="0.65" />
+              <stop offset="80%" stop-color="#475569" stop-opacity="0.3" />
+              <stop offset="100%" stop-color="#020617" stop-opacity="0" />
+            </linearGradient>
+            <linearGradient id="paperGrad6" x1="50%" y1="100%" x2="50%" y2="0%">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.7" />
+              <stop offset="100%" stop-color="#1E293B" stop-opacity="0.1" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <div class="floating-paper-sheet sheet-5">
+        <svg viewBox="0 0 260 190" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 60 C 100 20, 200 40, 240 90 C 220 160, 140 180, 60 160 C 10 140, 0 100, 20 60 Z" fill="url(#paperGrad7)" />
+          <defs>
+            <linearGradient id="paperGrad7" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#F1F5F9" stop-opacity="0.8" />
+              <stop offset="50%" stop-color="#64748B" stop-opacity="0.45" />
+              <stop offset="100%" stop-color="#020617" stop-opacity="0.05" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Main App Display Viewport (Sharp & Focused) ── -->
+  <div class="luxury-viewport-frame">
+    
+    <!-- ── Hero Stage Card (Glassmorphic Viewport) ── -->
+    <section class="hero-canvas-card">
+      
+      <!-- Inner Dynamic Smoked Glass Reflection -->
+      <div class="canvas-atmospheric-glow"></div>
+      <div class="card-inner-sheen"></div>
+
+      <!-- ── Top Navigation Bar ── -->
+      <header class="luxury-top-nav">
         
-        <div class="hero-content">
-          
-          <!-- Floating Interactive Node Pills -->
-          <div class="floating-nodes-row">
-            <div class="glass-node-pill">
-              <span class="node-dot cyan"></span>
-              <span>4K Ultra HD</span>
-            </div>
-            <div class="glass-node-pill">
-              <span class="node-dot blue"></span>
-              <span>Lossless 320k Audio</span>
-            </div>
-            <div class="glass-node-pill">
-              <span class="node-dot purple"></span>
-              <span>Multi-threaded Engine</span>
-            </div>
-            <div class="glass-node-pill">
-              <span class="node-dot green"></span>
-              <span>1,800+ Platforms</span>
+        <!-- Left Brand Swirl Logo -->
+        <a href="/" class="nav-swirl-brand" title="Stream Studio Home">
+          <svg class="swirl-logo-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2.5" opacity="0.3"/>
+            <path d="M16 4C9.37258 4 4 9.37258 4 16C4 22.6274 9.37258 28 16 28C22.6274 28 28 22.6274 28 16C28 12.5 26.5 9.5 24 7.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="16" cy="16" r="4" fill="currentColor"/>
+          </svg>
+        </a>
+
+        <!-- Center Floating Pill Menu Capsule -->
+        <nav class="nav-pill-capsule">
+          <a href="#hero" class="nav-link active">Home</a>
+          <a href="#pipeline" class="nav-link">Stream App</a>
+          <a href="#formats" class="nav-link">Assets</a>
+          <a href="#insights" class="nav-link">Features</a>
+          <a href="#pipeline" class="nav-link">Pipeline</a>
+          <a href="#insights" class="nav-link">FAQ</a>
+          <div class="nav-protection-pill" id="openFolderBtn" title="Open local downloads storage">
+            <span>Storage ↗</span>
+            <div class="protection-shield-icon">
+              <i class="fa-solid fa-folder-open"></i>
             </div>
           </div>
+        </nav>
 
-          <!-- Headline & Subtitle -->
-          <h1 class="hero-headline">
-            Orchestrate & Download<br>Any Video Stream in Pure 4K
-          </h1>
-          <p class="hero-subheadline">
-            Extract high-fidelity 4K, 1080p video and studio-grade MP3 audio seamlessly from YouTube, Instagram, TikTok, Twitter/X, and 1,800+ video networks.
-          </p>
+        <!-- Right Account & History Button -->
+        <button id="toggleHistoryBtn" class="nav-account-btn" title="View Download History">
+          <i class="fa-regular fa-clock"></i>
+          <span>Activity History</span>
+          <span class="nav-counter-dot" id="historyCount">0</span>
+        </button>
 
-          <!-- Sleek Central URL Input -->
-          <div class="input-glass-card">
-            <div class="input-icon-slot">
+      </header>
+
+      <!-- ── Constellation Connecting Circuit Wires (SVG Layer) ── -->
+      <svg class="constellation-svg-canvas" preserveAspectRatio="none">
+        <path id="wireCortex" class="circuit-wire" d="M 140 180 L 230 180 L 290 240 L 400 240" />
+        <path id="wireQuant" class="circuit-wire" d="M 860 190 L 770 190 L 710 250 L 600 250" />
+        <path id="wireAelf" class="circuit-wire" d="M 120 420 L 210 420 L 280 360 L 380 360" />
+        <path id="wireMeeton" class="circuit-wire" d="M 880 430 L 790 430 L 720 370 L 620 370" />
+      </svg>
+
+      <!-- ── Floating Constellation Node Pills (Unique App Features) ── -->
+      <!-- Node 1: 16-Socket Turbo (Top-Left) -->
+      <div class="constellation-node node-cortex">
+        <div class="node-icon-circle">
+          <i class="fa-solid fa-bolt node-glyph"></i>
+        </div>
+        <div class="node-label-group">
+          <span class="node-title">• 16-Socket Mux</span>
+          <span class="node-value">48.5 MB/s Turbo</span>
+        </div>
+      </div>
+
+      <!-- Node 2: 8K Lossless Master (Top-Right) -->
+      <div class="constellation-node node-quant">
+        <div class="node-icon-circle">
+          <i class="fa-solid fa-film node-glyph"></i>
+        </div>
+        <div class="node-label-group">
+          <span class="node-title">• 8K Ultra Master</span>
+          <span class="node-value">60 FPS Lossless</span>
+        </div>
+      </div>
+
+      <!-- Node 3: Zero Telemetry (Bottom-Left) -->
+      <div class="constellation-node node-aelf">
+        <div class="node-icon-circle">
+          <i class="fa-solid fa-shield-halved node-glyph"></i>
+        </div>
+        <div class="node-label-group">
+          <span class="node-title">• Zero Telemetry</span>
+          <span class="node-value">100% Client-Side</span>
+        </div>
+      </div>
+
+      <!-- Node 4: 1,800+ Hosts (Bottom-Right) -->
+      <div class="constellation-node node-meeton">
+        <div class="node-icon-circle">
+          <i class="fa-solid fa-globe node-glyph"></i>
+        </div>
+        <div class="node-label-group">
+          <span class="node-title">• 1,800+ Hosts</span>
+          <span class="node-value">Universal Support</span>
+        </div>
+      </div>
+
+      <!-- ── Center Stage Interactive Content ── -->
+      <div class="hero-center-container" id="hero">
+        
+        <!-- Subtle Play Button Beacon -->
+        <div class="play-beacon-circle">
+          <i class="fa-solid fa-play"></i>
+        </div>
+
+        <!-- Pill Badge Header -->
+        <div class="hero-sparkle-pill">
+          <i class="fa-solid fa-bolt-lightning sparkle-icon"></i>
+          <span>Multi-Socket Demux Engine v4.2 Active</span>
+        </div>
+
+        <!-- Bold Headline with Silver Gradient Fade -->
+        <h1 class="hero-statement-title">
+          One-click for <span class="title-fade-word">Stream Extraction</span>
+        </h1>
+
+        <!-- Subtitle -->
+        <p class="hero-statement-sub">
+          Dive into uncompressed media streams, where multi-threaded socket acceleration meets studio fidelity.
+        </p>
+
+        <!-- ── Embedded High-Tech Command Hub ── -->
+        <div class="luxury-command-deck">
+          <div class="command-input-capsule">
+            
+            <div class="input-prefix-indicator">
               <i class="fa-solid fa-link"></i>
             </div>
+
             <input 
               type="url" 
               id="videoUrlInput" 
-              placeholder="Paste any video link (e.g. https://www.youtube.com/watch?v=...)" 
+              class="luxury-url-input" 
+              placeholder="Paste any video or audio link (YouTube, TikTok, Reels, Twitter/X...)" 
               autocomplete="off" 
               spellcheck="false"
             >
-            <div class="input-side-tools">
-              <button id="pasteBtn" class="input-paste-btn" title="Paste from clipboard">
+
+            <div class="command-side-tools">
+              <button id="pasteBtn" class="embedded-tool-pill" title="Paste from clipboard">
                 <i class="fa-regular fa-paste"></i>
                 <span>Paste</span>
               </button>
-              <button id="clearBtn" class="input-clear-btn hidden" title="Clear input">
+              
+              <button id="clearBtn" class="embedded-tool-icon clear-btn hidden" title="Clear input">
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </div>
-            <button id="fetchBtn" class="cta-fetch-btn">
+
+          </div>
+
+          <!-- Dual Pill Action Buttons (Exact Match to Screenshot) -->
+          <div class="hero-dual-cta-row">
+            <button id="fetchBtn" class="glass-action-pill" title="Inspect Stream">
               <span class="btn-text">
-                <i class="fa-solid fa-wand-magic-sparkles"></i>
-                Analyze Stream
+                <span>Inspect Stream ↗</span>
               </span>
               <span class="btn-spinner hidden">
-                <i class="fa-solid fa-circle-notch fa-spin"></i>
-                Extracting...
+                <span class="cyan-extraction-radar"></span>
+                <span>Extracting...</span>
               </span>
+            </button>
+
+            <button id="discoverBtn" class="white-contrast-pill" title="Discover Formats">
+              <span>Discover Formats</span>
             </button>
           </div>
 
@@ -121,100 +286,130 @@
 
       </div>
 
-      <!-- Platform Trust Row -->
-      <div class="platform-trust-bar">
-        <span class="trust-title">Supported Video Networks</span>
-        <div class="platform-pills-row">
-          <span class="platform-pill"><i class="fa-brands fa-youtube" style="color:#FF0000;"></i> YouTube</span>
-          <span class="platform-pill"><i class="fa-brands fa-instagram" style="color:#E1306C;"></i> Instagram</span>
-          <span class="platform-pill"><i class="fa-brands fa-tiktok" style="color:#000000;"></i> TikTok</span>
-          <span class="platform-pill"><i class="fa-brands fa-x-twitter" style="color:#0F172A;"></i> Twitter / X</span>
-          <span class="platform-pill"><i class="fa-brands fa-reddit-alien" style="color:#FF4500;"></i> Reddit</span>
-          <span class="platform-pill"><i class="fa-brands fa-facebook" style="color:#1877F2;"></i> Facebook</span>
-          <span class="platform-pill"><i class="fa-brands fa-vimeo-v" style="color:#1AB7EA;"></i> Vimeo</span>
-          <span class="platform-pill"><i class="fa-solid fa-globe" style="color:#2563EB;"></i> 1,800+ More</span>
+      <!-- ── Bottom Hero Controls & Light Streaks ── -->
+      <div class="hero-bottom-bar">
+        
+        <!-- Left: Scroll Down Indicator -->
+        <a href="#insights" class="scroll-down-pill">
+          <div class="scroll-arrow-circle">
+            <i class="fa-solid fa-arrow-down"></i>
+          </div>
+          <span>01/03 . Scroll down</span>
+        </a>
+
+        <!-- Center: Vertical Falling Light Streaks -->
+        <div class="vertical-light-streaks">
+          <span class="streak s1"></span>
+          <span class="streak s2"></span>
+          <span class="streak s3"></span>
+          <span class="streak s4"></span>
         </div>
+
+        <!-- Right: Pagination & Horizon Tag -->
+        <div class="horizon-pagination">
+          <span class="horizon-label">Stream horizons</span>
+          <div class="dash-pagination">
+            <span class="dash active"></span>
+            <span class="dash"></span>
+            <span class="dash"></span>
+          </div>
+        </div>
+
       </div>
+
+      <!-- ── Platform Logo Footer Ribbon (Exact Match to Reference) ── -->
+      <div class="platform-monochrome-strip">
+        <span class="brand-mono"><i class="fa-brands fa-youtube"></i> YouTube</span>
+        <span class="brand-mono"><i class="fa-brands fa-instagram"></i> Instagram</span>
+        <span class="brand-mono"><i class="fa-brands fa-tiktok"></i> TikTok</span>
+        <span class="brand-mono"><i class="fa-brands fa-x-twitter"></i> X / Twitter</span>
+        <span class="brand-mono"><i class="fa-brands fa-reddit-alien"></i> Reddit</span>
+        <span class="brand-mono"><i class="fa-brands fa-facebook"></i> Facebook</span>
+        <span class="brand-mono"><i class="fa-brands fa-vimeo-v"></i> Vimeo</span>
+        <span class="brand-mono"><i class="fa-solid fa-cube"></i> Raycast</span>
+      </div>
+
     </section>
 
-    <!-- ── Error Alert Banner ── -->
-    <div id="errorBanner" class="error-banner hidden">
-      <div class="error-icon">
-        <i class="fa-solid fa-circle-exclamation"></i>
+    <!-- ── Error Feedback Alert ── -->
+    <div id="errorBanner" class="luxury-error-alert hidden" role="alert">
+      <div class="alert-icon-circle">
+        <i class="fa-solid fa-triangle-exclamation"></i>
       </div>
-      <div class="error-content">
-        <h4 id="errorTitle">Could not fetch video stream</h4>
-        <p id="errorMessage">Please check the URL and ensure the video is publicly accessible.</p>
+      <div class="alert-text-group">
+        <h4 id="errorTitle">Stream Extraction Failed</h4>
+        <p id="errorMessage">Please check the URL or ensure the video stream is publicly accessible.</p>
       </div>
-      <button id="closeErrorBtn" class="error-close-btn" title="Dismiss error">
+      <button id="closeErrorBtn" class="alert-close-btn" title="Dismiss error">
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
 
-    <!-- ── Video Result Card ── -->
-    <section id="resultSection" class="result-section hidden">
-      <div class="result-card">
+    <!-- ── Video Stream Inspection Result Card ── -->
+    <section id="resultSection" class="luxury-result-section hidden">
+      <div class="result-display-card">
         
-        <!-- Video Header & Metadata -->
-        <div class="video-header-grid">
-          <div class="video-thumb-container">
-            <img id="videoThumb" src="" alt="Video Stream Thumbnail">
-            <span id="videoDuration" class="duration-tag">00:00</span>
-            <div class="site-badge" id="siteBadge">
-              <i class="fa-solid fa-play" style="color:#2563EB; font-size:10px;"></i>
+        <div class="result-media-grid">
+          <!-- Thumbnail Visualizer -->
+          <div class="media-thumb-frame">
+            <img id="videoThumb" src="" alt="Stream Preview" loading="lazy">
+            <span id="videoDuration" class="media-duration-tag">00:00</span>
+            <div class="media-source-tag" id="siteBadge">
+              <i class="fa-solid fa-circle-play"></i>
               <span id="siteName">Web</span>
             </div>
           </div>
 
-          <div class="video-metadata-col">
-            <h2 id="videoTitle" class="video-title-display">Video Stream Title Loading...</h2>
+          <!-- Technical Metadata Column -->
+          <div class="media-info-column">
+            <h2 id="videoTitle" class="media-title-text">Stream Title Loading...</h2>
             
-            <div class="meta-tags-row">
-              <div class="meta-pill" id="uploaderChip">
-                <i class="fa-solid fa-circle-user" style="color:#64748B;"></i>
+            <div class="media-chips-row">
+              <div class="meta-tag-pill" id="uploaderChip">
+                <i class="fa-solid fa-circle-user"></i>
                 <span id="videoUploader">Channel</span>
               </div>
-              <div class="meta-pill" id="viewsContainer">
-                <i class="fa-solid fa-eye" style="color:#64748B;"></i>
+              <div class="meta-tag-pill" id="viewsContainer">
+                <i class="fa-solid fa-chart-simple"></i>
                 <span id="videoViews">0 views</span>
               </div>
-              <span class="quality-crown-pill" id="maxQualityBadge">
+              <div class="silver-quality-badge" id="maxQualityBadge">
                 <i class="fa-solid fa-crown"></i>
-                <span>4K Available</span>
-              </span>
+                <span>4K Ultra HD</span>
+              </div>
             </div>
 
-            <p class="stream-info-note">
-              <i class="fa-solid fa-circle-info"></i>
-              <span>High-resolution 4K and 1080p formats are dynamically merged with crystal-clear audio via local multi-threaded engine.</span>
+            <p class="demux-status-text">
+              <i class="fa-solid fa-circle-check"></i>
+              <span>Hardware-accelerated 16-socket pipeline active. Streams are directly multiplexed with zero re-encoding loss.</span>
             </p>
           </div>
         </div>
 
-        <!-- Format Segmented Toggle Bar -->
-        <div class="format-controls-header">
-          <div class="segmented-toggle-bar">
-            <button class="toggle-segment-btn active" data-tab="video-tab">
+        <!-- Format Segmented Controls -->
+        <div class="format-segmented-container" id="formats">
+          <div class="luxury-segmented-switch">
+            <button class="segment-pill-btn toggle-segment-btn active" data-tab="video-tab">
               <i class="fa-solid fa-film"></i>
               <span>Video Formats (MP4)</span>
             </button>
-            <button class="toggle-segment-btn" data-tab="audio-tab">
+            <button class="segment-pill-btn toggle-segment-btn" data-tab="audio-tab">
               <i class="fa-solid fa-music"></i>
-              <span>Audio Only (MP3)</span>
+              <span>Master Audio (MP3)</span>
             </button>
           </div>
         </div>
 
-        <!-- Format Stream Lists -->
-        <div class="formats-body-wrapper">
+        <!-- Format Matrix Grid -->
+        <div class="format-panes-wrapper">
           <div id="video-tab" class="tab-pane active">
-            <div class="format-rows-stack" id="videoFormatsGrid">
-              <!-- Injected dynamically by app.js -->
+            <div class="format-rows-matrix" id="videoFormatsGrid">
+              <!-- Injected by app.js -->
             </div>
           </div>
           <div id="audio-tab" class="tab-pane">
-            <div class="format-rows-stack" id="audioFormatsGrid">
-              <!-- Injected dynamically by app.js -->
+            <div class="format-rows-matrix" id="audioFormatsGrid">
+              <!-- Injected by app.js -->
             </div>
           </div>
         </div>
@@ -222,107 +417,243 @@
       </div>
     </section>
 
-    <!-- ── Active Downloads Section ── -->
-    <section id="activeDownloadsSection" class="active-downloads-section hidden">
-      <h3 class="section-title-clean">
-        <i class="fa-solid fa-circle-arrow-down"></i>
-        Active Download Pipeline
-      </h3>
-      <div id="activeDownloadsList" class="active-downloads-list">
-        <!-- Live Download Items Injected Dynamically -->
+    <!-- ── Active Downloads Pipeline ── -->
+    <section id="activeDownloadsSection" class="luxury-pipeline-section hidden">
+      <div class="pipeline-section-title-row" id="pipeline">
+        <div class="title-with-pulse">
+          <span class="live-status-dot"></span>
+          <h3>Active Download Pipeline</h3>
+        </div>
+        <span class="pipeline-status-caption">16-Socket High-Speed Background Workers</span>
+      </div>
+      <div id="activeDownloadsList" class="pipeline-cards-stack">
+        <!-- Live downloads injected by app.js -->
       </div>
     </section>
 
-    <!-- ── History Drawer / Slide-Over ── -->
-    <div id="historyDrawer" class="hidden">
-      <div class="drawer-backdrop" id="drawerOverlay"></div>
-      <div class="drawer-slide-panel">
-        <div class="drawer-header-clean">
-          <div class="drawer-title-group">
-            <i class="fa-solid fa-clock-rotate-left"></i>
-            <h3>Download History</h3>
+    <!-- ── Section 2: "Meet Marvellous Insights" Bento Grid (Exact Match to Screenshot) ── -->
+    <section class="luxury-insights-section" id="insights">
+      
+      <div class="insights-header">
+        <h2 class="insights-main-heading">Meet Marvellous Insights</h2>
+        <p class="insights-subheading">Save your team's precious time. Stream Studio replaces the lengthy process of manual download.</p>
+      </div>
+
+      <!-- Bento 4-Card Grid -->
+      <div class="insights-bento-grid">
+        
+        <!-- Bento Card 1: 99.4% Global Delivery + 3D Rotating Globe Graphic -->
+        <div class="bento-card-surface card-globe-delivery">
+          <div class="card-metric-header">
+            <div class="metric-number-wrap">
+              <span class="big-metric">99.4%</span>
+              <i class="fa-solid fa-arrow-up-right metric-arrow"></i>
+            </div>
+            <span class="metric-caption">Spots . Worldwide</span>
           </div>
-          <div class="drawer-actions-group">
-            <button id="openFolderDrawerBtn" class="pill-btn" style="font-size:12px; padding:6px 14px;">
-              <i class="fa-regular fa-folder-open"></i>
-              <span>Open Storage</span>
-            </button>
-            <button id="closeHistoryBtn" class="drawer-close-circle" title="Close history">
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-        </div>
-        <div class="drawer-scroll-body">
-          <div id="historyList" class="history-items-stack">
-            <div class="empty-state-card">
-              <i class="fa-solid fa-cloud-arrow-down"></i>
-              <p>No downloads recorded yet. Paste a link above to start!</p>
+
+          <!-- Stylized Globe with Connection Spots -->
+          <div class="stylized-globe-visual">
+            <div class="globe-orbit-ring"></div>
+            <div class="globe-spot spot-1" title="Node Alpha">
+              <span class="spot-label">Spot 1</span>
+            </div>
+            <div class="globe-spot spot-2" title="Node Beta">
+              <span class="spot-label">Spot 2</span>
+            </div>
+            <div class="globe-spot spot-3" title="Node Gamma">
+              <span class="spot-label">Spot 3</span>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- ── Cancel Confirmation Modal ── -->
-    <div id="cancelConfirmModal" class="modal-backdrop-clean hidden">
-      <div class="confirm-box-card">
-        <div class="confirm-icon-bubble">
-          <i class="fa-solid fa-triangle-exclamation"></i>
+          <div class="bento-card-footer">
+            <div class="cmd-pill-badge">
+              <span class="key-badge">^K</span>
+              <span>Opens Spots api dev</span>
+              <span class="key-badge">I</span>
+              <span>Assign issue to experts</span>
+            </div>
+            <h4>Success Stream Transactions</h4>
+            <p>Multi-threaded socket technology meets ultra-low latency to empower your media extraction pipeline.</p>
+          </div>
         </div>
-        <h3>Cancel Stream Download?</h3>
-        <p id="cancelConfirmText">Are you sure you want to stop and cancel this active download?</p>
-        <div class="confirm-btn-pair">
-          <button id="cancelConfirmNoBtn" class="pill-btn">
-            <i class="fa-solid fa-arrow-left"></i>
-            Keep Downloading
-          </button>
-          <button id="cancelConfirmYesBtn" class="danger-pill-btn">
-            <i class="fa-solid fa-xmark"></i>
-            Cancel Stream
-          </button>
-        </div>
-      </div>
-    </div>
 
-    <!-- ── Features Showcase Footer (4 Columns) ── -->
-    <footer class="features-saas-footer">
-      <div class="saas-feature-card">
-        <div class="saas-feature-icon">
-          <i class="fa-solid fa-shield-halved"></i>
+        <!-- Bento Card 2: Liquidity Labyrinth with 3D Glowing Cylinders -->
+        <div class="bento-card-surface card-cylinders-labyrinth">
+          <div class="cylinders-3d-visual">
+            <div class="cylinder-bar c1">
+              <div class="cylinder-cap"></div>
+              <div class="cylinder-body"></div>
+            </div>
+            <div class="cylinder-bar c2">
+              <div class="cylinder-cap"></div>
+              <div class="cylinder-body"></div>
+            </div>
+            <div class="cylinder-bar c3">
+              <div class="cylinder-cap active-cap"></div>
+              <div class="cylinder-body"></div>
+            </div>
+            <div class="cylinder-bar c4">
+              <div class="cylinder-cap"></div>
+              <div class="cylinder-body"></div>
+            </div>
+            <div class="cylinder-bar c5">
+              <div class="cylinder-cap"></div>
+              <div class="cylinder-body"></div>
+            </div>
+            <div class="cylinder-bar c6">
+              <div class="cylinder-cap"></div>
+              <div class="cylinder-body"></div>
+            </div>
+          </div>
+
+          <div class="bento-card-footer">
+            <h4>Pipeline Throughput Labyrinth</h4>
+            <p>Liquidity stream labyrinth, where each multi-socket turn unlocks unthrottled 4K transmission bandwidth.</p>
+          </div>
         </div>
-        <h4>Visual Stream Privacy</h4>
-        <p>100% local device execution. Zero third-party telemetry, zero account requirements, zero tracking.</p>
+
+        <!-- Bento Card 3: Financial / Stream Growth Stats -->
+        <div class="bento-card-surface card-growth-stats">
+          <div class="growth-stats-row">
+            <div class="stat-column">
+              <span class="stat-category-pill yellow">Bitrate Stream</span>
+              <span class="stat-number">19.2</span>
+              <span class="stat-currency">4K 60fps</span>
+            </div>
+            <div class="stat-column">
+              <span class="stat-category-pill sage">Studio Audio</span>
+              <span class="stat-number">24</span>
+              <span class="stat-currency">320 kbps</span>
+            </div>
+          </div>
+
+          <div class="bento-card-footer">
+            <h4>Your Palette Stream Opportunities</h4>
+            <p>Watch your downloaded media collection expand in a private, client-side ecosystem with zero third-party telemetry.</p>
+          </div>
+        </div>
+
+        <!-- Bento Card 4: Format Opportunities with Dynamic Bar Chart -->
+        <div class="bento-card-surface card-bar-chart">
+          <div class="chart-header-group">
+            <h4>Stream Space . Opportunities</h4>
+            <p>Where each format stream is a lossless container and every resolution is a crystal-clear render.</p>
+          </div>
+
+          <!-- Dynamic Bar Chart (Exact Match to Screenshot) -->
+          <div class="pastel-bar-chart-visual">
+            <div class="chart-column">
+              <span class="bar-num">10</span>
+              <div class="chart-bar b1"></div>
+            </div>
+            <div class="chart-column">
+              <span class="bar-num">32</span>
+              <div class="chart-bar b2"></div>
+            </div>
+            <div class="chart-column">
+              <span class="bar-num">45</span>
+              <div class="chart-bar b3"></div>
+            </div>
+            <div class="chart-column">
+              <span class="bar-num">12</span>
+              <div class="chart-bar b4"></div>
+            </div>
+            <div class="chart-column">
+              <span class="bar-num">28</span>
+              <div class="chart-bar b5"></div>
+            </div>
+          </div>
+
+          <div class="chart-pagination-dots">
+            <span class="dot active"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+
       </div>
 
-      <div class="saas-feature-card">
-        <div class="saas-feature-icon">
-          <i class="fa-solid fa-gauge-high"></i>
+      <!-- Section 2 Footer Links -->
+      <div class="insights-footer-row">
+        <div class="insights-left-links">
+          <a href="#hero">Support</a>
+          <span>•</span>
+          <a href="#pipeline">Register</a>
         </div>
-        <h4>Real-Time Pipeline Speed</h4>
-        <p>Multi-threaded segment pulling engine supporting 4K Ultra HD, 60 FPS, and 320kbps lossless MP3.</p>
+        <div class="insights-center-copy">
+          <span>© Designed with love at Stream Studio • 2026</span>
+        </div>
+        <div class="insights-social-icons">
+          <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" title="Twitter / X"><i class="fa-brands fa-x-twitter"></i></a>
+          <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" title="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a>
+        </div>
       </div>
 
-      <div class="saas-feature-card">
-        <div class="saas-feature-icon">
-          <i class="fa-solid fa-sliders"></i>
-        </div>
-        <h4>Smart Format Extraction</h4>
-        <p>Automated resolution and audio stream muxing using optimized FFmpeg backend pipelines.</p>
-      </div>
-
-      <div class="saas-feature-card">
-        <div class="saas-feature-icon">
-          <i class="fa-solid fa-infinity"></i>
-        </div>
-        <h4>Universal Integration</h4>
-        <p>Unlimited download capability across 1,800+ social and video streaming platforms with zero ads.</p>
-      </div>
-    </footer>
+    </section>
 
   </div>
 
-  <!-- Toast Container -->
-  <div id="toastContainer" class="toast-container"></div>
+  <!-- ── Slide-Over Activity History Drawer ── -->
+  <div id="historyDrawer" class="luxury-drawer-overlay hidden">
+    <div class="drawer-scrim-backdrop" id="drawerOverlay"></div>
+    <div class="drawer-slide-surface">
+      
+      <div class="drawer-top-header">
+        <div class="drawer-title-group">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <div>
+            <h3>Activity History</h3>
+            <p>Saved media on local disk</p>
+          </div>
+        </div>
+        
+        <div class="drawer-actions-cluster">
+          <button id="openFolderDrawerBtn" class="drawer-storage-pill" title="Open storage directory">
+            <i class="fa-regular fa-folder-open"></i>
+            <span>Storage</span>
+          </button>
+          <button id="closeHistoryBtn" class="drawer-close-circle" title="Close drawer">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="drawer-scrollable-body">
+        <div id="historyList" class="history-cards-matrix">
+          <div class="empty-history-placeholder">
+            <i class="fa-solid fa-cloud-arrow-down"></i>
+            <p>No downloads recorded yet. Paste a link above to start!</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Cancel Confirmation Modal ── -->
+  <div id="cancelConfirmModal" class="luxury-modal-overlay hidden">
+    <div class="modal-card-container">
+      <div class="modal-alert-icon">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <h3>Halt Stream Extraction?</h3>
+      <p id="cancelConfirmText">Are you sure you want to stop and cancel this active download?</p>
+      <div class="modal-buttons-pair">
+        <button id="cancelConfirmNoBtn" class="modal-keep-btn">
+          <i class="fa-solid fa-arrow-left"></i>
+          <span>Keep Downloading</span>
+        </button>
+        <button id="cancelConfirmYesBtn" class="modal-abort-btn">
+          <i class="fa-solid fa-xmark"></i>
+          <span>Halt Stream</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Floating Toast Container ── -->
+  <div id="toastContainer" class="luxury-toast-stack"></div>
 
   <!-- Application Logic -->
   <script src="js/app.js"></script>

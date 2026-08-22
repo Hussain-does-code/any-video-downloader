@@ -1,7 +1,10 @@
-// Apex Video Downloader — Glass Ribbons & Intelligent Flow Engine Frontend Logic
-// Robust, high-speed, and production-tested.
+// ==========================================================================
+// Stream Studio — Luxury Dark Reference Frontend Engine
+// Constellation Parallax · Multi-Socket Progress Stream · Full API Hookup
+// ==========================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+
   // ─── DOM References ───
   const videoUrlInput          = document.getElementById('videoUrlInput');
   const pasteBtn               = document.getElementById('pasteBtn');
@@ -9,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const fetchBtn               = document.getElementById('fetchBtn');
   const btnText                = fetchBtn ? fetchBtn.querySelector('.btn-text') : null;
   const btnSpinner             = fetchBtn ? fetchBtn.querySelector('.btn-spinner') : null;
+  const discoverBtn            = document.getElementById('discoverBtn');
 
   const errorBanner            = document.getElementById('errorBanner');
   const errorTitle             = document.getElementById('errorTitle');
@@ -50,24 +54,72 @@ document.addEventListener('DOMContentLoaded', () => {
   let pendingCancelDownloadId  = null;
 
   const toastContainer         = document.getElementById('toastContainer');
+  const constellationNodes     = document.querySelectorAll('.constellation-node');
 
-  // State Management
+  // Application State
   let currentVideoData = null;
   const activeEventSources = new Map();
 
-  // ─── Toast Notifications ───
+  // ══════════════════════════════════════════════════════════════
+  // 1. CONSTELLATION NODE MOUSE PARALLAX
+  // ══════════════════════════════════════════════════════════════
+  if (constellationNodes.length > 0) {
+    window.addEventListener('mousemove', (e) => {
+      const x = (e.clientX - window.innerWidth / 2) / 45;
+      const y = (e.clientY - window.innerHeight / 2) / 45;
+
+      constellationNodes.forEach((node, index) => {
+        const factor = (index % 2 === 0 ? 1 : -1) * 0.7;
+        node.style.transform = `translate(${x * factor}px, ${y * factor}px)`;
+      });
+    });
+  }
+
+  // ─── Security: HTML Sanitization Helpers ───
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function escapeAttr(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 2. TOAST NOTIFICATIONS SYSTEM
+  // ══════════════════════════════════════════════════════════════
   function showToast(message, type = 'info', icon = 'fa-circle-info') {
     if (!toastContainer) return;
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.innerHTML = `<i class="fa-solid ${icon}"></i><span>${message}</span>`;
+    const safeType = ['info', 'success', 'warning', 'error'].includes(type) ? type : 'info';
+    toast.className = `toast ${safeType}`;
+
+    const iconEl = document.createElement('i');
+    iconEl.className = `fa-solid ${escapeAttr(icon)}`;
+
+    const textEl = document.createElement('span');
+    textEl.textContent = String(message || '');
+
+    toast.appendChild(iconEl);
+    toast.appendChild(textEl);
     toastContainer.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = '0';
-      toast.style.transform = 'translateY(-10px)';
-      toast.style.transition = 'all 0.3s ease';
-      setTimeout(() => toast.remove(), 300);
-    }, 4000);
+      toast.style.transform = 'translateY(10px)';
+      toast.style.transition = 'all 0.25s ease';
+      setTimeout(() => toast.remove(), 250);
+    }, 3800);
   }
 
   // ─── Error Banner Handlers ───
@@ -87,7 +139,9 @@ document.addEventListener('DOMContentLoaded', () => {
     closeErrorBtn.addEventListener('click', hideError);
   }
 
-  // ─── Input Listeners ───
+  // ══════════════════════════════════════════════════════════════
+  // 3. COMMAND INPUT & KEYBOARD SHORTCUTS
+  // ══════════════════════════════════════════════════════════════
   if (videoUrlInput) {
     videoUrlInput.addEventListener('input', () => {
       if (clearBtn) {
@@ -110,7 +164,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ─── Clipboard Paste ───
   if (pasteBtn) {
     pasteBtn.addEventListener('click', async () => {
       try {
@@ -119,15 +172,15 @@ document.addEventListener('DOMContentLoaded', () => {
           if (videoUrlInput) {
             videoUrlInput.value = text.trim();
             if (clearBtn) clearBtn.classList.remove('hidden');
-            showToast('Stream link pasted!', 'success', 'fa-check');
+            showToast('Stream URL pasted!', 'success', 'fa-check');
             analyzeVideo();
           }
         } else {
-          showToast('Please copy a valid video URL first.', 'info', 'fa-copy');
+          showToast('No valid URL found in clipboard', 'info', 'fa-copy');
         }
       } catch (err) {
         if (videoUrlInput) videoUrlInput.focus();
-        showToast('Press Ctrl+V to paste your video link.', 'info', 'fa-keyboard');
+        showToast('Press Ctrl+V to paste link', 'info', 'fa-keyboard');
       }
     });
   }
@@ -141,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (text && text.trim().startsWith('http') && videoUrlInput) {
             videoUrlInput.value = text.trim();
             if (clearBtn) clearBtn.classList.remove('hidden');
-            showToast('Stream link pasted!', 'success', 'fa-check');
+            showToast('Stream URL pasted!', 'success', 'fa-check');
             videoUrlInput.focus();
             analyzeVideo();
           }
@@ -154,7 +207,18 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchBtn.addEventListener('click', analyzeVideo);
   }
 
-  // ─── Segmented Format Toggle ───
+  if (discoverBtn) {
+    discoverBtn.addEventListener('click', () => {
+      if (videoUrlInput && videoUrlInput.value.trim().length > 0) {
+        analyzeVideo();
+      } else {
+        videoUrlInput.focus();
+        showToast('Paste a video link above to discover formats', 'info', 'fa-wand-magic-sparkles');
+      }
+    });
+  }
+
+  // Segmented Format Toggle
   toggleSegmentBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       toggleSegmentBtns.forEach((b) => b.classList.remove('active'));
@@ -165,18 +229,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // ─── Analyze Video Function ───
+  // ══════════════════════════════════════════════════════════════
+  // 4. STREAM EXTRACTION & ANALYSIS
+  // ══════════════════════════════════════════════════════════════
   async function analyzeVideo() {
     if (!videoUrlInput) return;
     let url = videoUrlInput.value.trim();
 
     if (!url) {
-      showError('No Link Entered', 'Please paste a valid video URL from any supported network.');
+      showError('No Link Entered', 'Please paste a valid video URL from any supported media network.');
       videoUrlInput.focus();
       return;
     }
 
-    // Auto-fix protocol
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       if (url.startsWith('//')) {
         url = 'https:' + url;
@@ -207,17 +272,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res.status === 429) {
           const retrySec = json.retryAfter || 15;
           showToast(`Rate limit reached: Please wait ${retrySec}s`, 'warning', 'fa-clock');
-          showError('Rate Limit Exceeded', json.error || `You are submitting requests too quickly. Please wait ${retrySec} seconds before analyzing another URL.`);
+          showError('Rate Limit Exceeded', json.error || `Please wait ${retrySec} seconds before inspecting another URL.`);
           return;
         }
-        throw new Error(json.error || 'Failed to analyze video stream.');
+        throw new Error(json.error || 'Failed to inspect stream metadata.');
       }
 
       currentVideoData = json.data;
       renderVideoResult(json.data);
-      showToast('Video stream analysis complete!', 'success', 'fa-circle-check');
+      showToast('Stream analysis complete!', 'success', 'fa-circle-check');
     } catch (err) {
-      showError('Extraction Failed', err.message || 'Could not fetch video stream metadata.');
+      showError('Extraction Failed', err.message || 'Could not fetch stream metadata.');
     } finally {
       setLoading(false);
     }
@@ -226,26 +291,32 @@ document.addEventListener('DOMContentLoaded', () => {
   function setLoading(isLoading) {
     if (!fetchBtn) return;
     fetchBtn.disabled = isLoading;
+    fetchBtn.classList.toggle('is-extracting', isLoading);
+    const inputCapsule = document.querySelector('.command-input-capsule');
+    if (inputCapsule) inputCapsule.classList.toggle('is-scanning', isLoading);
     if (btnText) btnText.classList.toggle('hidden', isLoading);
     if (btnSpinner) btnSpinner.classList.toggle('hidden', !isLoading);
   }
 
-  // ─── Render Video Result ───
+  // ══════════════════════════════════════════════════════════════
+  // 5. RENDER VIDEO RESULT
+  // ══════════════════════════════════════════════════════════════
   function renderVideoResult(data) {
     if (!resultSection) return;
 
-    if (videoTitle) videoTitle.textContent = data.title || 'Untitled Video';
+    if (videoTitle) videoTitle.textContent = data.title || 'Untitled Stream';
     if (videoThumb) {
       const thumbUrl = data.thumbnail || '';
       if (thumbUrl.startsWith('http') && !thumbUrl.includes('/api/proxy-image')) {
         videoThumb.src = `/api/proxy-image?url=${encodeURIComponent(thumbUrl)}`;
       } else {
-        videoThumb.src = thumbUrl || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="%23141b2d"/><text x="50%" y="50%" fill="%23818cf8" font-size="22" font-family="sans-serif" text-anchor="middle" dominant-baseline="middle">▶ Video Stream</text></svg>';
+        videoThumb.src = thumbUrl || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="%2311141c"/><text x="50%" y="50%" fill="%23a8ceb9" font-size="22" font-family="sans-serif" text-anchor="middle" dominant-baseline="middle">▶ Stream Preview</text></svg>';
       }
       videoThumb.onerror = () => {
-        videoThumb.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="%23141b2d"/><text x="50%" y="50%" fill="%23818cf8" font-size="22" font-family="sans-serif" text-anchor="middle" dominant-baseline="middle">▶ Video Stream</text></svg>';
+        videoThumb.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="%2311141c"/><text x="50%" y="50%" fill="%23a8ceb9" font-size="22" font-family="sans-serif" text-anchor="middle" dominant-baseline="middle">▶ Stream Preview</text></svg>';
       };
     }
+
     if (videoDuration) videoDuration.textContent = data.durationFormatted || '00:00';
     if (videoUploader) videoUploader.textContent = data.uploader || 'Channel';
     if (siteName) siteName.textContent = data.site || 'Web';
@@ -281,7 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (videoFormatsGrid) {
       videoFormatsGrid.innerHTML = '';
       if (!data.videoFormats || data.videoFormats.length === 0) {
-        videoFormatsGrid.innerHTML = `<div class="empty-state-card"><p>No standard video formats detected.</p></div>`;
+        videoFormatsGrid.innerHTML = `<div class="empty-history-placeholder"><p>No standard video formats detected.</p></div>`;
       } else {
         data.videoFormats.forEach((f) => {
           const is8k = f.height >= 4320 || f.badge === '8K';
@@ -289,26 +360,25 @@ document.addEventListener('DOMContentLoaded', () => {
           const row = document.createElement('div');
           row.className = `stream-format-row ${is8k ? 'is-8k' : is4k ? 'is-4k' : ''}`;
 
-          let fpsLabel = f.fps && f.fps >= 50 ? `${f.fps}fps • ` : '';
+          let fpsLabel = f.fps && f.fps >= 50 ? `${escapeHtml(f.fps)}fps • ` : '';
 
-            const safeTitle = (data.title || 'video').replace(/[/\\?%*:|"<>]/g, '_');
-            row.innerHTML = `
+          row.innerHTML = `
             <div class="row-left-details">
-              <div class="res-tag-badge">${f.badge}</div>
+              <div class="res-tag-badge">${escapeHtml(f.badge || 'HD')}</div>
               <div class="format-text-meta">
-                <h4>${f.label}</h4>
-                <p>${fpsLabel}MP4 Video Stream • High Quality</p>
+                <h4>${escapeHtml(f.label || 'Standard Video')}</h4>
+                <p>${fpsLabel}MP4 Video Stream • Lossless Mux</p>
               </div>
             </div>
             <div class="row-right-actions">
-              <span class="file-size-indicator">${f.sizeFormatted || 'Original Quality'}</span>
+              <span class="file-size-indicator">${escapeHtml(f.sizeFormatted || 'Original Bitrate')}</span>
               ${f.directUrl ? `
-                <button class="copy-direct-btn" data-url="${f.directUrl}" title="Copy Direct Stream Link">
+                <button class="copy-direct-btn" data-url="${escapeAttr(f.directUrl)}" title="Copy Direct Stream Link">
                   <i class="fa-solid fa-link"></i>
                   <span>Copy</span>
                 </button>
               ` : ''}
-              <button class="download-stream-btn" data-type="video" data-id="${f.formatId}" data-height="${f.height}" data-direct-url="${f.directUrl || ''}">
+              <button class="download-stream-btn" data-type="video" data-id="${escapeAttr(f.formatId || '')}" data-height="${escapeAttr(f.height || '')}" data-direct-url="${escapeAttr(f.directUrl || '')}">
                 <i class="fa-solid fa-arrow-down"></i>
                 <span>Download</span>
               </button>
@@ -329,12 +399,12 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="row-left-details">
             <div class="res-tag-badge">MP3</div>
             <div class="format-text-meta">
-              <h4>Audio Stream (Best Fidelity)</h4>
-              <p>MP3 Audio • Studio Quality</p>
+              <h4>Master Audio (Highest Quality)</h4>
+              <p>MP3 Audio • Studio Bitrate</p>
             </div>
           </div>
           <div class="row-right-actions">
-            <span class="file-size-indicator">Best Quality</span>
+            <span class="file-size-indicator">320 kbps</span>
             <button class="download-stream-btn" data-type="audio" data-id="bestaudio">
               <i class="fa-solid fa-music"></i>
               <span>Download MP3</span>
@@ -350,19 +420,19 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="row-left-details">
               <div class="res-tag-badge">MP3</div>
               <div class="format-text-meta">
-                <h4>MP3 Audio (${a.quality})</h4>
-                <p>${a.codec || 'Audio Stream'} • High Fidelity</p>
+                <h4>MP3 Master Audio (${escapeHtml(a.quality || 'HQ')})</h4>
+                <p>${escapeHtml(a.codec || 'Audio Stream')} • Lossless Extraction</p>
               </div>
             </div>
             <div class="row-right-actions">
-              <span class="file-size-indicator">${a.sizeFormatted || 'Best Quality'}</span>
+              <span class="file-size-indicator">${escapeHtml(a.sizeFormatted || 'Highest Quality')}</span>
               ${a.directUrl ? `
-                <button class="copy-direct-btn" data-url="${a.directUrl}" title="Copy Direct Audio Link">
+                <button class="copy-direct-btn" data-url="${escapeAttr(a.directUrl)}" title="Copy Direct Audio Link">
                   <i class="fa-solid fa-link"></i>
                   <span>Copy</span>
                 </button>
               ` : ''}
-              <button class="download-stream-btn" data-type="audio" data-id="${a.formatId}" data-direct-url="${a.directUrl || ''}">
+              <button class="download-stream-btn" data-type="audio" data-id="${escapeAttr(a.formatId || '')}" data-direct-url="${escapeAttr(a.directUrl || '')}">
                 <i class="fa-solid fa-music"></i>
                 <span>Download MP3</span>
               </button>
@@ -373,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Attach Copy Direct Link Event Listeners
+    // Attach Copy Link Listeners
     document.querySelectorAll('.copy-direct-btn').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -389,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // Attach Download Event Listeners (Starts 16-parallel socket high-speed engine)
+    // Attach Download Listeners
     document.querySelectorAll('.download-stream-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const isAudio = btn.dataset.type === 'audio';
@@ -404,75 +474,13 @@ document.addEventListener('DOMContentLoaded', () => {
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  // ─── Direct Browser Downloader (Bypasses ISP DPI) ───
-  function triggerBrowserDownload(directUrl, filename, badge) {
-    showToast(`Downloading ${badge ? badge + ' ' : ''}video via browser...`, 'success', 'fa-cloud-arrow-down');
-
-    const downloadId = 'browser_' + Math.random().toString(36).substring(2, 9);
-    if (activeDownloadsSection) activeDownloadsSection.classList.remove('hidden');
-    if (activeDownloadsList) {
-      const card = document.createElement('div');
-      card.className = 'pipeline-download-card';
-      card.id = `download-${downloadId}`;
-      card.innerHTML = `
-        <div class="pipeline-header">
-          <div class="pipeline-title">
-            <i class="fa-solid fa-film"></i>
-            <span>${filename.replace(/\.(mp4|mp3)$/i, '')}</span>
-          </div>
-          <div class="pipeline-actions-right">
-            <span class="status-pill completed">Downloading</span>
-          </div>
-        </div>
-        <div class="progress-flow-wrap">
-          <div class="progress-flow-track">
-            <div class="progress-flow-fill" style="width: 100%; background: linear-gradient(90deg, #059669, #10B981);"></div>
-          </div>
-          <div class="progress-flow-meta">
-            <span>Direct stream downloading via your browser's download manager</span>
-            <span>Check browser downloads</span>
-          </div>
-        </div>
-        <div class="completed-action-row" style="margin-top: 12px; display: flex; gap: 10px;">
-          <a href="${directUrl}" target="_blank" rel="noopener noreferrer" class="save-file-cta" style="background: #0F172A;">
-            <i class="fa-solid fa-arrow-up-right-from-square"></i>
-            <span>Open Stream</span>
-          </a>
-          <button class="save-file-cta copy-direct-btn" data-url="${directUrl}" style="background: #2563EB;">
-            <i class="fa-solid fa-copy"></i>
-            <span>Copy Stream URL</span>
-          </button>
-        </div>
-      `;
-      activeDownloadsList.prepend(card);
-      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      const newCopyBtn = card.querySelector('.copy-direct-btn');
-      if (newCopyBtn) {
-        newCopyBtn.addEventListener('click', async () => {
-          try {
-            await navigator.clipboard.writeText(directUrl);
-            showToast('Stream URL copied to clipboard!', 'success', 'fa-copy');
-          } catch (e) {}
-        });
-      }
-    }
-
-    const a = document.createElement('a');
-    a.href = directUrl;
-    a.download = filename;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => a.remove(), 1000);
-  }
-
-  // ─── Start Download Pipeline ───
+  // ══════════════════════════════════════════════════════════════
+  // 6. START DOWNLOAD PIPELINE
+  // ══════════════════════════════════════════════════════════════
   async function startDownload({ isAudio, formatId, height, directUrl }) {
     if (!currentVideoData) return;
 
-    showToast('Initializing high-speed stream pipeline...', 'info', 'fa-bolt');
+    showToast('Initializing 16-socket stream worker...', 'info', 'fa-bolt');
     if (activeDownloadsSection) activeDownloadsSection.classList.remove('hidden');
 
     try {
@@ -508,22 +516,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ─── Create Active Download Card ───
+  // ─── Create Active Pipeline Card ───
   function createActiveDownloadCard(downloadId, title, isAudio) {
     if (!activeDownloadsList) return;
 
+    const safeId = escapeAttr(downloadId);
+    const safeTitle = escapeHtml(title || 'Stream');
+
     const card = document.createElement('div');
     card.className = 'pipeline-download-card';
-    card.id = `download-${downloadId}`;
+    card.id = `download-${safeId}`;
     card.innerHTML = `
       <div class="pipeline-header">
         <div class="pipeline-title">
           <i class="fa-solid ${isAudio ? 'fa-music' : 'fa-film'}"></i>
-          <span>${title}</span>
+          <span>${safeTitle}</span>
         </div>
         <div class="pipeline-actions-right">
-          <span class="status-pill" id="status-badge-${downloadId}">Starting</span>
-          <button class="cancel-stream-btn" id="cancel-btn-${downloadId}" title="Stop download">
+          <span class="status-pill" id="status-badge-${safeId}">Starting</span>
+          <button class="cancel-stream-btn" id="cancel-btn-${safeId}" title="Stop download">
             <i class="fa-solid fa-xmark"></i>
             <span>Cancel</span>
           </button>
@@ -532,16 +543,16 @@ document.addEventListener('DOMContentLoaded', () => {
       
       <div class="progress-flow-wrap">
         <div class="progress-flow-track">
-          <div class="progress-flow-fill" id="progress-bar-${downloadId}" style="width: 0%;"></div>
+          <div class="progress-flow-fill" id="progress-bar-${safeId}" style="width: 0%;"></div>
         </div>
         <div class="progress-flow-meta">
-          <span id="progress-text-${downloadId}">0% • Initializing pipeline...</span>
-          <span id="speed-text-${downloadId}">-- MB/s • ETA: --</span>
+          <span id="progress-text-${safeId}">0% • Initializing 16-socket pipeline...</span>
+          <span id="speed-text-${safeId}">-- MB/s • ETA: --</span>
         </div>
       </div>
 
-      <div class="completed-action-row hidden" id="actions-${downloadId}">
-        <a href="/api/file/${downloadId}" class="save-file-cta" download>
+      <div class="completed-action-row hidden" id="actions-${safeId}">
+        <a href="/api/file/${safeId}" class="save-file-cta" download>
           <i class="fa-solid fa-cloud-arrow-down"></i>
           <span>Save to Device</span>
         </a>
@@ -586,7 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (cancelConfirmModal) cancelConfirmModal.classList.add('hidden');
       pendingCancelDownloadId = null;
 
-      showToast('Stopping stream download...', 'info', 'fa-ban');
+      showToast('Halting download stream...', 'info', 'fa-ban');
 
       try {
         await fetch(`/api/download/cancel/${id}`, { method: 'POST' });
@@ -615,14 +626,16 @@ document.addEventListener('DOMContentLoaded', () => {
           activeEventSources.delete(id);
         }
 
-        showToast('Stream download cancelled.', 'info', 'fa-circle-check');
+        showToast('Download cancelled.', 'info', 'fa-circle-check');
       } catch (err) {
         showToast('Could not cancel download.', 'error', 'fa-triangle-exclamation');
       }
     });
   }
 
-  // ─── SSE Real-Time Progress Stream ───
+  // ══════════════════════════════════════════════════════════════
+  // 7. SSE REAL-TIME PROGRESS STREAM
+  // ══════════════════════════════════════════════════════════════
   function subscribeToProgress(downloadId) {
     const eventSource = new EventSource(`/api/progress/${downloadId}`);
     activeEventSources.set(downloadId, eventSource);
@@ -644,18 +657,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.status === 'downloading') {
           if (badge) {
             badge.textContent = 'Downloading';
-            badge.className = 'status-pill';
+            badge.className = 'status-pill downloading';
           }
           if (progressText) progressText.textContent = `${percent.toFixed(1)}% of ${data.totalSize || '--'}`;
           if (speedText) speedText.textContent = `${data.speed || '--'} • ETA: ${data.eta || '--'}`;
         } else if (data.status === 'merging') {
           if (badge) {
-            badge.textContent = 'Merging Streams';
+            badge.textContent = 'Merging Bitstreams';
             badge.className = 'status-pill merging';
           }
           if (bar) bar.classList.add('merging');
           if (progressText) progressText.textContent = 'Merging video & audio streams with FFmpeg...';
-          if (speedText) speedText.textContent = 'Processing Pipeline';
+          if (speedText) speedText.textContent = 'Hardware Acceleration';
         } else if (data.status === 'completed') {
           if (badge) {
             badge.textContent = 'Completed';
@@ -666,7 +679,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bar.classList.remove('merging');
           }
           if (progressText) progressText.textContent = '100% • Stream Download Finished!';
-          if (speedText) speedText.textContent = 'Saved to Downloads Directory';
+          if (speedText) speedText.textContent = 'Saved to Storage';
           if (actions) actions.classList.remove('hidden');
           if (cancelBtn) cancelBtn.classList.add('hidden');
 
@@ -675,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
           activeEventSources.delete(downloadId);
           loadHistory();
 
-          // Auto-download trigger
+          // Auto-download trigger to browser
           const autoLink = document.createElement('a');
           autoLink.href = `/api/file/${downloadId}`;
           autoLink.download = data.outputFile || 'video.mp4';
@@ -699,25 +712,21 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (data.status === 'error') {
           if (badge) {
             const isIspBlock = data.error && (data.error.includes('ISP') || data.error.includes('10054') || data.error.includes('DNS filter'));
-            badge.textContent = isIspBlock ? 'Blocked by ISP' : 'Download Failed';
-            badge.style.background = '#FEF2F2';
-            badge.style.color = '#DC2626';
+            badge.textContent = isIspBlock ? 'Blocked by ISP' : 'Extraction Failed';
+            badge.style.background = 'rgba(239, 68, 68, 0.12)';
+            badge.style.color = 'var(--accent-coral)';
           }
           if (cancelBtn) cancelBtn.classList.add('hidden');
           if (progressText) progressText.textContent = data.error || 'Download failed.';
-          if (speedText) speedText.textContent = data.error?.includes('404') ? 'Stream missing on host' : 'Use Direct Download below';
+          if (speedText) speedText.textContent = data.error?.includes('404') ? 'Stream missing on host' : 'Try Direct Browser Stream';
           
           if (actions && currentVideoData?.videoFormats?.[0]?.directUrl) {
             const streamUrl = currentVideoData.videoFormats[0].directUrl;
             const safeTitle = (currentVideoData.title || 'video').replace(/[/\\?%*:|"<>]/g, '_');
             actions.innerHTML = `
-              <a href="${streamUrl}" download="${safeTitle}.mp4" target="_blank" rel="noopener noreferrer" class="save-file-cta" style="background: #2563EB;">
+              <a href="${escapeAttr(streamUrl)}" download="${escapeAttr(safeTitle)}.mp4" target="_blank" rel="noopener noreferrer" class="save-file-cta">
                 <i class="fa-solid fa-cloud-arrow-down"></i>
-                <span>Download Directly in Browser</span>
-              </a>
-              <a href="${streamUrl}" target="_blank" rel="noopener noreferrer" class="save-file-cta" style="background: #0F172A;">
-                <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                <span>Open Stream (VLC / Browser)</span>
+                <span>Direct Browser Download</span>
               </a>
             `;
             actions.classList.remove('hidden');
@@ -737,7 +746,9 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // ─── Download History ───
+  // ══════════════════════════════════════════════════════════════
+  // 8. DOWNLOAD HISTORY
+  // ══════════════════════════════════════════════════════════════
   async function loadHistory() {
     try {
       const res = await fetch('/api/history');
@@ -754,7 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
     historyList.innerHTML = '';
     if (items.length === 0) {
       historyList.innerHTML = `
-        <div class="empty-state-card">
+        <div class="empty-history-placeholder">
           <i class="fa-solid fa-cloud-arrow-down"></i>
           <p>No downloads recorded yet. Paste a link above to start!</p>
         </div>
@@ -765,13 +776,17 @@ document.addEventListener('DOMContentLoaded', () => {
     items.forEach((item) => {
       const el = document.createElement('div');
       el.className = 'history-entry-card';
-      const isAudio = item.filename.endsWith('.mp3');
+      const isAudio = (item.filename || '').endsWith('.mp3');
+      const safeName = escapeHtml(item.cleanName || item.filename || 'media');
+      const safeSize = escapeHtml(item.sizeFormatted || '0 B');
+      const safeUrl = escapeAttr(item.downloadUrl || '#');
+
       el.innerHTML = `
         <div class="entry-text-info">
-          <h5><i class="fa-solid ${isAudio ? 'fa-music' : 'fa-film'}"></i> ${item.cleanName}</h5>
-          <p>${item.sizeFormatted} • ${new Date(item.createdAt).toLocaleTimeString()}</p>
+          <h5><i class="fa-solid ${isAudio ? 'fa-music' : 'fa-film'}"></i> ${safeName}</h5>
+          <p>${safeSize} • ${new Date(item.createdAt).toLocaleTimeString()}</p>
         </div>
-        <a href="${item.downloadUrl}" class="entry-save-btn" download>
+        <a href="${safeUrl}" class="entry-save-btn" download>
           <i class="fa-solid fa-download"></i>
           <span>Save</span>
         </a>
@@ -795,7 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         historyDrawer.classList.add('hidden');
         historyDrawer.classList.remove('drawer-closing');
-      }, 260);
+      }, 240);
     }
   }
 
@@ -803,7 +818,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (closeHistoryBtn) closeHistoryBtn.addEventListener('click', closeHistoryDrawer);
   if (drawerOverlay) drawerOverlay.addEventListener('click', closeHistoryDrawer);
 
-  // ─── Open Folder Handlers ───
+  // ─── Open Folder Storage Handlers ───
   async function openDownloadsFolder() {
     const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
     if (!isLocal) {
@@ -814,7 +829,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/open-folder', { method: 'POST' });
       const json = await res.json();
       if (json.ok) {
-        showToast('Opened downloads folder in file manager!', 'success', 'fa-folder-open');
+        showToast('Opened storage folder in file manager', 'success', 'fa-folder-open');
       }
     } catch (e) {
       showToast('Could not open storage folder automatically.', 'error', 'fa-triangle-exclamation');
@@ -824,6 +839,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (openFolderBtn) openFolderBtn.addEventListener('click', openDownloadsFolder);
   if (openFolderDrawerBtn) openFolderDrawerBtn.addEventListener('click', openDownloadsFolder);
 
-  // Initial History Load
+  // Initial Load
   loadHistory();
 });

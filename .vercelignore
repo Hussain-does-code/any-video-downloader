@@ -7,3 +7,5 @@ test/
 *.log
 .git/
 .env*
+**/.env*
+**/.env

@@ -232,6 +232,31 @@ async function runTests() {
     assert(rateLimitedResponse.headers['retry-after'], 'Retry-After header must be present on 429');
   });
 
+  // 17. PII / Path Leakage Test on /api/status
+  await test('GET /api/status does not leak internal filesystem path (downloadsDir)', async () => {
+    const res = await makeRequest('/api/status');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.downloadsDir, undefined, 'downloadsDir must not be exposed in /api/status');
+  });
+
+  // 18. SSRF Numeric/Decimal IP Defense on /api/analyze
+  await test('POST /api/analyze blocks decimal and hex representation of loopback (2130706433 / 0x7f000001)', async () => {
+    const resDecimal = await makeRequest('/api/analyze', 'POST', { url: 'http://2130706433/internal' });
+    assert.strictEqual(resDecimal.status, 400);
+    assert.strictEqual(resDecimal.data.ok, false);
+
+    const resHex = await makeRequest('/api/analyze', 'POST', { url: 'http://0x7f000001/internal' });
+    assert.strictEqual(resHex.status, 400);
+    assert.strictEqual(resHex.data.ok, false);
+  });
+
+  // 19. SSRF Carrier-Grade NAT (100.64.0.1) Defense
+  await test('POST /api/analyze blocks Carrier-Grade NAT 100.64.0.1 range', async () => {
+    const res = await makeRequest('/api/analyze', 'POST', { url: 'http://100.64.0.1:8080/cloud' });
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.data.ok, false);
+  });
+
   console.log(`\n========================================`);
   console.log(`📊 Test Results: ${passed} passed, ${failed} failed`);
   console.log(`========================================\n`);

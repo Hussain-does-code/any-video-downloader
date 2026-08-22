@@ -214,6 +214,50 @@ app.use((req, res, next) => {
   next();
 });
 
+function isPrivateIpNumber(num) {
+  if (typeof num !== 'number' || isNaN(num)) return false;
+  // 0.0.0.0/8 (0 - 16777215)
+  if (num >= 0 && num <= 16777215) return true;
+  // 10.0.0.0/8 (167772160 - 184549375)
+  if (num >= 167772160 && num <= 184549375) return true;
+  // 100.64.0.0/10 Carrier-Grade NAT (1681915904 - 1686110207)
+  if (num >= 1681915904 && num <= 1686110207) return true;
+  // 127.0.0.0/8 (2130706432 - 2147483647)
+  if (num >= 2130706432 && num <= 2147483647) return true;
+  // 169.254.0.0/16 Link-Local / Cloud Metadata (2851995648 - 2852061183)
+  if (num >= 2851995648 && num <= 2852061183) return true;
+  // 172.16.0.0/12 (2886729728 - 2887778303)
+  if (num >= 2886729728 && num <= 2887778303) return true;
+  // 192.168.0.0/16 (3232235520 - 3232301055)
+  if (num >= 3232235520 && num <= 3232301055) return true;
+  // 255.255.255.255 Broadcast
+  if (num === 4294967295) return true;
+  return false;
+}
+
+function parseIpv4ToNumber(ipStr) {
+  if (/^\d+$/.test(ipStr)) {
+    return parseInt(ipStr, 10);
+  }
+  if (/^0x[0-9a-f]+$/i.test(ipStr)) {
+    return parseInt(ipStr, 16);
+  }
+  const parts = ipStr.split('.');
+  if (parts.length !== 4) return null;
+  let num = 0;
+  for (let i = 0; i < 4; i++) {
+    let p = parts[i].trim();
+    let val = 0;
+    if (/^0x[0-9a-f]+$/i.test(p)) val = parseInt(p, 16);
+    else if (/^0[0-7]+$/.test(p)) val = parseInt(p, 8);
+    else if (/^\d+$/.test(p)) val = parseInt(p, 10);
+    else return null;
+    if (val < 0 || val > 255) return null;
+    num = (num << 8) | val;
+  }
+  return num >>> 0; // Convert to unsigned 32-bit integer
+}
+
 // ─── K37 Security: SSRF Protection & Private IP Range Blocker ───
 function isPrivateOrLocalUrl(targetUrl) {
   if (!targetUrl || typeof targetUrl !== 'string') return true;
@@ -228,6 +272,12 @@ function isPrivateOrLocalUrl(targetUrl) {
     }
 
     const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+
+    // Check numeric/hex representation or dotted quad
+    const ipNum = parseIpv4ToNumber(host);
+    if (ipNum !== null && isPrivateIpNumber(ipNum)) {
+      return true;
+    }
 
     // Localhost & Loopback addresses
     if (
@@ -2083,36 +2133,29 @@ app.get('/api/proxy-image', proxyRateLimiter, async (req, res) => {
     return res.status(400).send('Restricted or invalid image URL');
   }
 
-  const gateways = [
-    `https://proxy.cors.sh/${decoded}`,
-    `https://corsproxy.org/?${encodeURIComponent(decoded)}`,
-    decoded
-  ];
-
-  for (const gw of gateways) {
-    try {
-      const response = await fetch(gw, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Referer': decoded.startsWith('http') ? new URL(decoded).origin + '/' : ''
-        },
-        signal: AbortSignal.timeout(6000)
-      });
-      if (response.ok) {
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        if (!contentType.startsWith('image/')) {
-          continue;
-        }
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        const buf = Buffer.from(await response.arrayBuffer());
-        if (buf.length > 10 * 1024 * 1024) { // Max 10MB image limit
-          return res.status(413).send('Image too large');
-        }
-        return res.send(buf);
+  try {
+    const parsed = new URL(decoded);
+    const response = await fetch(decoded, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': `${parsed.protocol}//${parsed.hostname}/`
+      },
+      signal: AbortSignal.timeout(6000)
+    });
+    if (response.ok) {
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      if (!contentType.startsWith('image/')) {
+        return res.status(400).send('Invalid content type');
       }
-    } catch (e) {}
-  }
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      const buf = Buffer.from(await response.arrayBuffer());
+      if (buf.length > 10 * 1024 * 1024) { // Max 10MB image limit
+        return res.status(413).send('Image too large');
+      }
+      return res.send(buf);
+    }
+  } catch (e) {}
 
   res.redirect('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="%23141b2d"/><text x="50%" y="50%" fill="%23818cf8" font-size="20" font-family="sans-serif" text-anchor="middle" dominant-baseline="middle">▶ Video Stream</text></svg>');
 });
@@ -2123,7 +2166,6 @@ app.get('/api/status', pollingRateLimiter, (req, res) => {
     ok: true,
     ytdlpAvailable: isBinaryAvailable(getYtdlpPath()),
     ffmpegAvailable: isBinaryAvailable(getFfmpegPath()),
-    downloadsDir: DOWNLOADS_DIR,
     version: '3.4.0'
   });
 });
@@ -2960,19 +3002,22 @@ app.get('/api/download-file/:filename', fileDeliveryLimiter, (req, res) => {
 });
 
 app.post('/api/open-folder', (req, res) => {
+  if (isServerless || process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ ok: false, error: 'Feature disabled in production / cloud environment.' });
+  }
   try {
     if (process.platform === 'win32') {
       exec(`explorer.exe "${DOWNLOADS_DIR}"`, () => {});
-      return res.json({ ok: true, path: DOWNLOADS_DIR });
+      return res.json({ ok: true });
     } else if (process.platform === 'darwin') {
       exec(`open "${DOWNLOADS_DIR}"`, () => {});
-      return res.json({ ok: true, path: DOWNLOADS_DIR });
+      return res.json({ ok: true });
     } else {
       exec(`xdg-open "${DOWNLOADS_DIR}"`, () => {});
-      return res.json({ ok: true, path: DOWNLOADS_DIR });
+      return res.json({ ok: true });
     }
   } catch (err) {
-    res.json({ ok: true, path: DOWNLOADS_DIR });
+    res.json({ ok: true });
   }
 });
 
